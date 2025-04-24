@@ -1,5 +1,4 @@
 import time
-
 import generate_dataset
 from ultralytics import YOLO
 import paths
@@ -33,7 +32,7 @@ for index in range(len(video_paths)):
     print(f"ball data:{ball_path}")
     print(f"output:{output_path}")
 
-    generate_dataset.generate_pose_dataset_batch_with_dynamic_crop(model, first_crop_region, crop_region_path, video_path, pose_path, batch_size=1)
+    generate_dataset.generate_pose_dataset(model, first_crop_region, video_path, pose_path)
     ## marge ball and pose json
     generate_dataset.generate_multi_dataset(ball_path, pose_path,output_path)
     ## preview result

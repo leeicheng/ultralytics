@@ -7,7 +7,7 @@ def generate_video(video_path, multi_path, crop_regin_path, output_path, crop_re
     # 建立 VideoCapture 與讀取標籤/裁切區域
     source_video = cv2.VideoCapture(video_path)
     labels = json.load(open(multi_path, 'r', encoding='utf-8'))
-    crop_regin_json = json.load(open(crop_regin_path, 'r', encoding='utf-8'))  # 每幀 crop_region
+    # crop_regin_json = json.load(open(crop_regin_path, 'r', encoding='utf-8'))  # 每幀 crop_region
 
     # 取得影片參數
     fps = int(source_video.get(cv2.CAP_PROP_FPS))
@@ -32,10 +32,10 @@ def generate_video(video_path, multi_path, crop_regin_path, output_path, crop_re
         players = label.get('Players', [])
 
         # 根據每一幀的 crop_region 畫框
-        if frame_id < len(crop_regin_json):
-            crop = crop_regin_json[frame_id].get('crop_region', crop_region)
-        else:
-            crop = crop_region
+        # if frame_id < len(crop_regin_json):
+        #     crop = crop_regin_json[frame_id].get('crop_region', crop_region)
+        # else:
+        crop = crop_region
         cv2.rectangle(
             annotated_frame,
             (int(crop[0]), int(crop[1])),
