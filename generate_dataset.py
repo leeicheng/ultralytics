@@ -40,77 +40,77 @@ def generate_multi_dataset(ball_path, pose_path,output_path):
 
     output = refactor_output(poses)
 
-    # 2. track list，存每隻 track 的歷史中心點
-    tracks = []  # 每個 track: { 'id', 'history': [centroids], 'instances': [(frame_idx, player_idx)] }
-    next_id = 0
-
-    for fi, frame in enumerate(output):
-        centroids = [get_centroid(p['Bounding Box']) for p in frame['Players']]
-        if fi == 0:
-            # 首幀：全部新 track
-            for pi, cen in enumerate(centroids):
-                tracks.append({
-                    'id': next_id,
-                    'history': [cen],
-                    'instances': [(fi, pi)]
-                })
-                next_id += 1
-        else:
-            assigned = set()
-            # 1-to-1 greedy matching
-            for tr in tracks:
-                last = tr['history'][-1]
-                dists = [np.linalg.norm(cen - last) for cen in centroids]
-                pairs = sorted(enumerate(dists), key=lambda x: x[1])
-                for pi, dist in pairs:
-                    if pi in assigned or dist > MAX_MATCH_DIST:
-                        continue
-                    # assign detection to track
-                    tr['history'].append(centroids[pi])
-                    tr['instances'].append((fi, pi))
-                    assigned.add(pi)
-                    break
-            # 剩餘沒配對到的，當新 track
-            for pi in range(len(centroids)):
-                if pi not in assigned:
-                    tracks.append({
-                        'id': next_id,
-                        'history': [centroids[pi]],
-                        'instances': [(fi, pi)]
-                    })
-                    next_id += 1
-
-    # 先把短少的 track 直接踢掉
-    tracks = [tr for tr in tracks if len(tr['history']) >= MIN_TRACK_LEN]
-
-    # 3. 判別哪個 track 在移動
-    moving_ids = set()
-    for tr in tracks:
-        hist = tr['history']
-        if len(hist) < 2:
-            continue
-
-        dists = [np.linalg.norm(hist[i] - hist[i - 1]) for i in range(1, len(hist))]
-        avg_speed = sum(dists) / len(dists)
-        if avg_speed > MAX_STATIC_SPEED:
-            moving_ids.add(tr['id'])
-
-    # 4. 產生新的 frames
-    cleaned = []
-    for fi, frame in enumerate(output):
-        new_players = []
-        for tr in tracks:
-            for fidx, pidx in tr['instances']:
-                if fidx == fi and tr['id'] in moving_ids:
-                    new_players.append(frame['Players'][pidx])
-        cleaned.append({
-            'Frame': frame['Frame'],
-            'Balls': frame.get('Balls', []),
-            'Players': new_players
-        })
+    # # 2. track list，存每隻 track 的歷史中心點
+    # tracks = []  # 每個 track: { 'id', 'history': [centroids], 'instances': [(frame_idx, player_idx)] }
+    # next_id = 0
+    #
+    # for fi, frame in enumerate(output):
+    #     centroids = [get_centroid(p['Bounding Box']) for p in frame['Players']]
+    #     if fi == 0:
+    #         # 首幀：全部新 track
+    #         for pi, cen in enumerate(centroids):
+    #             tracks.append({
+    #                 'id': next_id,
+    #                 'history': [cen],
+    #                 'instances': [(fi, pi)]
+    #             })
+    #             next_id += 1
+    #     else:
+    #         assigned = set()
+    #         # 1-to-1 greedy matching
+    #         for tr in tracks:
+    #             last = tr['history'][-1]
+    #             dists = [np.linalg.norm(cen - last) for cen in centroids]
+    #             pairs = sorted(enumerate(dists), key=lambda x: x[1])
+    #             for pi, dist in pairs:
+    #                 if pi in assigned or dist > MAX_MATCH_DIST:
+    #                     continue
+    #                 # assign detection to track
+    #                 tr['history'].append(centroids[pi])
+    #                 tr['instances'].append((fi, pi))
+    #                 assigned.add(pi)
+    #                 break
+    #         # 剩餘沒配對到的，當新 track
+    #         for pi in range(len(centroids)):
+    #             if pi not in assigned:
+    #                 tracks.append({
+    #                     'id': next_id,
+    #                     'history': [centroids[pi]],
+    #                     'instances': [(fi, pi)]
+    #                 })
+    #                 next_id += 1
+    #
+    # # 先把短少的 track 直接踢掉
+    # tracks = [tr for tr in tracks if len(tr['history']) >= MIN_TRACK_LEN]
+    #
+    # # 3. 判別哪個 track 在移動
+    # moving_ids = set()
+    # for tr in tracks:
+    #     hist = tr['history']
+    #     if len(hist) < 2:
+    #         continue
+    #
+    #     dists = [np.linalg.norm(hist[i] - hist[i - 1]) for i in range(1, len(hist))]
+    #     avg_speed = sum(dists) / len(dists)
+    #     if avg_speed > MAX_STATIC_SPEED:
+    #         moving_ids.add(tr['id'])
+    #
+    # # 4. 產生新的 frames
+    # cleaned = []
+    # for fi, frame in enumerate(output):
+    #     new_players = []
+    #     for tr in tracks:
+    #         for fidx, pidx in tr['instances']:
+    #             if fidx == fi and tr['id'] in moving_ids:
+    #                 new_players.append(frame['Players'][pidx])
+    #     cleaned.append({
+    #         'Frame': frame['Frame'],
+    #         'Balls': frame.get('Balls', []),
+    #         'Players': new_players
+    #     })
 
     with open(output_path, 'w', encoding='utf-8') as file:
-        json.dump(cleaned, file, indent=2)
+        json.dump(output, file, indent=2)
 
 def generate_ball_dataset(csv_paths: str,output_paths: str):
     """
