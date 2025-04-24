@@ -151,6 +151,14 @@ def generate_pose_dataset(model,crop_region,video_path,output_path):
         players = []
 
         for i,box in enumerate(boxes):
+            kpts_list = []
+            if results.keypoints is not None:
+                keypoints = results.keypoints.xy.cpu().numpy()  # (n, 17, 2)
+
+                for x, y in keypoints[i]:
+                    x_full = float(x) + crop_region[0] if x != 0 else 0
+                    y_full = float(y) + crop_region[1] if y != 0 else 0
+                    kpts_list.append({"X": int(x_full), "Y": int(y_full)})
 
             # 處理 bounding box
             x_center, y_center, w, h = boxes[i]
@@ -167,43 +175,8 @@ def generate_pose_dataset(model,crop_region,video_path,output_path):
             # 加入單一 player 結構
             players.append({
                 "Bounding Box": bbox,
-                "Keypoints": []
+                "Keypoints": kpts_list
             })
-
-        # for i, kpts in enumerate(keypoints):
-        #     # 調整 keypoints 座標為整張圖的位置
-        #     kpts_list = []
-        #     for x, y in kpts:
-        #         x_full = float(x) + crop_region[0] if x != 0 else 0
-        #         y_full = float(y) + crop_region[1] if y != 0 else 0
-        #
-        #         # x_full = float(x) if x != 0 else 0
-        #         # y_full = float(y) if y != 0 else 0
-        #         kpts_list.append({"X": int(x_full), "Y": int(y_full)})
-        #
-        #
-        #     # x_full = int(x_center)
-        #     # y_full = int(y_center)
-        #
-        #     bbox = {
-        #         "X": x_full,
-        #         "Y": y_full,
-        #         "Width": int(w),
-        #         "Height": int(h)
-        #     }
-        #
-        #     # 畫框（畫在 cropped 上）
-        #     # x1 = int(x_center - w / 2)
-        #     # y1 = int(y_center - h / 2)
-        #     # x2 = int(x_center + w / 2)
-        #     # y2 = int(y_center + h / 2)
-        #     # cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        #
-        #     # 加入單一 player 結構
-        #     players.append({
-        #         "Bounding Box": bbox,
-        #         "Keypoints": []
-        #     })
 
         # 組裝 JSON 結構
         all_results.append({
