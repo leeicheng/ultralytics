@@ -147,26 +147,15 @@ def generate_pose_dataset(model,crop_region,video_path,output_path):
         results = model(annotated_frame, conf=0.5)[0]
 
         boxes = results.boxes.xywh.cpu().numpy()  # (x_center, y_center, w, h)
-        keypoints = results.keypoints.xy.cpu().numpy()  # (n, 17, 2)
+        # keypoints = results.keypoints.xy.cpu().numpy()  # (n, 17, 2)
         players = []
 
-        for i, kpts in enumerate(keypoints):
-            # 調整 keypoints 座標為整張圖的位置
-            kpts_list = []
-            for x, y in kpts:
-                x_full = float(x) + crop_region[0] if x != 0 else 0
-                y_full = float(y) + crop_region[1] if y != 0 else 0
-
-                # x_full = float(x) if x != 0 else 0
-                # y_full = float(y) if y != 0 else 0
-                kpts_list.append({"X": int(x_full), "Y": int(y_full)})
+        for i,box in enumerate(boxes):
 
             # 處理 bounding box
             x_center, y_center, w, h = boxes[i]
             x_full = int(x_center + crop_region[0])
             y_full = int(y_center + crop_region[1])
-            # x_full = int(x_center)
-            # y_full = int(y_center)
 
             bbox = {
                 "X": x_full,
@@ -175,18 +164,46 @@ def generate_pose_dataset(model,crop_region,video_path,output_path):
                 "Height": int(h)
             }
 
-            # 畫框（畫在 cropped 上）
-            # x1 = int(x_center - w / 2)
-            # y1 = int(y_center - h / 2)
-            # x2 = int(x_center + w / 2)
-            # y2 = int(y_center + h / 2)
-            # cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-
             # 加入單一 player 結構
             players.append({
                 "Bounding Box": bbox,
-                "Keypoints": kpts_list
+                "Keypoints": []
             })
+
+        # for i, kpts in enumerate(keypoints):
+        #     # 調整 keypoints 座標為整張圖的位置
+        #     kpts_list = []
+        #     for x, y in kpts:
+        #         x_full = float(x) + crop_region[0] if x != 0 else 0
+        #         y_full = float(y) + crop_region[1] if y != 0 else 0
+        #
+        #         # x_full = float(x) if x != 0 else 0
+        #         # y_full = float(y) if y != 0 else 0
+        #         kpts_list.append({"X": int(x_full), "Y": int(y_full)})
+        #
+        #
+        #     # x_full = int(x_center)
+        #     # y_full = int(y_center)
+        #
+        #     bbox = {
+        #         "X": x_full,
+        #         "Y": y_full,
+        #         "Width": int(w),
+        #         "Height": int(h)
+        #     }
+        #
+        #     # 畫框（畫在 cropped 上）
+        #     # x1 = int(x_center - w / 2)
+        #     # y1 = int(y_center - h / 2)
+        #     # x2 = int(x_center + w / 2)
+        #     # y2 = int(y_center + h / 2)
+        #     # cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        #
+        #     # 加入單一 player 結構
+        #     players.append({
+        #         "Bounding Box": bbox,
+        #         "Keypoints": []
+        #     })
 
         # 組裝 JSON 結構
         all_results.append({
@@ -203,89 +220,6 @@ def generate_pose_dataset(model,crop_region,video_path,output_path):
         json.dump(all_results, f, indent=2)
 
     print(f"完成！已產出影片與格式化 JSON。{time.time() - start_time:.2f} seconds.")
-
-def generate_pose_dataset_batch(model, crop_region, video_path, output_path, batch_size=4):
-    start_time = time.time()
-    cap = cv2.VideoCapture(video_path)
-    all_results = []
-    frame_id = 0
-    batch_frames = []
-    batch_raw_frames = []
-    batch_frame_ids = []
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        cropped_frame = frame[crop_region[1]:crop_region[3], crop_region[0]:crop_region[2]]
-        batch_frames.append(cropped_frame)
-        batch_raw_frames.append(frame)
-        batch_frame_ids.append(frame_id)
-        frame_id += 1
-
-        if len(batch_frames) == batch_size:
-            all_results.extend(process_batch(model, batch_frames, batch_raw_frames, batch_frame_ids, crop_region))
-            batch_frames = []
-            batch_raw_frames = []
-            batch_frame_ids = []
-
-    # 收尾：剩下不足 batch 的也要處理
-    if batch_frames:
-        all_results.extend(process_batch(model, batch_frames, batch_raw_frames, batch_frame_ids, crop_region))
-
-    cap.release()
-    with open(output_path, 'w') as f:
-        json.dump(all_results, f, indent=2)
-
-    print(f"完成！已產出影片與格式化 JSON。{time.time() - start_time:.2f} seconds.")
-
-
-def process_batch(model, cropped_batch, raw_batch, frame_ids, crop_region):
-    results_batch = model(cropped_batch, conf=0.5)
-    batch_results = []
-
-    for b_idx, results in enumerate(results_batch):
-        frame_results = []
-        boxes = results.boxes.xywh.cpu().numpy()
-        keypoints = results.keypoints.xy.cpu().numpy()
-
-        if len(boxes) == 0 or len(keypoints) == 0:
-            batch_results.append({
-                "Frame": frame_ids[b_idx],
-                "Players": []  # 空的
-            })
-            continue
-
-        for i, kpts in enumerate(keypoints):
-            kpts_list = []
-            for x, y in kpts:
-                x_full = float(x) + crop_region[0] if x != 0 else 0
-                y_full = float(y) + crop_region[1] if y != 0 else 0
-                kpts_list.append({"X": int(x_full), "Y": int(y_full)})
-
-            x_center, y_center, w, h = boxes[i]
-            x_full = int(x_center + crop_region[0])
-            y_full = int(y_center + crop_region[1])
-
-            bbox = {
-                "X": x_full,
-                "Y": y_full,
-                "Width": int(w),
-                "Height": int(h)
-            }
-
-            frame_results.append({
-                "Bounding Box": bbox,
-                "Keypoints": kpts_list
-            })
-
-        batch_results.append({
-            "Frame": frame_ids[b_idx],
-            "Players": frame_results
-        })
-
-    return batch_results
 
 def generate_pose_dataset_batch_with_dynamic_crop(model, crop_region, crop_out_path, video_path, output_path, batch_size=4):
     start_time = time.time()
