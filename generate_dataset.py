@@ -52,14 +52,13 @@ def generate_ball_dataset(csv_paths: str,output_paths: str):
             json.dump(output, file, indent=2)
     print("完成！已將所有 CSV 轉為 JSON。")
 
-def generate_pose_dataset(model,crop_region,video_path,output_path):
+def generate_pose_dataset(model,crop_region,video_path,output_path,compute_pose:bool=True):
     start_time = time.time()
     # ----- 初始化 -----
     cap = cv2.VideoCapture(video_path)
 
     all_results = []
     frame_id = 0
-
     # ----- 處理每一幀 -----
     while True:
         ret, frame = cap.read()
@@ -69,9 +68,7 @@ def generate_pose_dataset(model,crop_region,video_path,output_path):
         # 裁切畫面
         cropped_frame = frame[crop_region[1]:crop_region[3], crop_region[0]:crop_region[2]]
         annotated_frame = cropped_frame.copy()
-
-        results = model(annotated_frame, conf=0.5)[0]
-
+        results = model.predict(annotated_frame, conf=0.5, compute_pose = compute_pose)[0]
         boxes = results.boxes.xywh.cpu().numpy()  # (x_center, y_center, w, h)
         # keypoints = results.keypoints.xy.cpu().numpy()  # (n, 17, 2)
         players = []
