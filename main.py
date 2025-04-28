@@ -5,7 +5,7 @@ import paths
 import preview
 
 model = YOLO('yolov8x-pose.pt')
-dir_path = "./datasets"
+dir_path = "./datasets/profession_match_1"
 
 start_time = time.time()
 
@@ -32,10 +32,12 @@ for index in range(len(video_paths)):
     print(f"ball data:{ball_path}")
     print(f"output:{output_path}")
 
-    generate_dataset.generate_pose_dataset(model, first_crop_region, video_path, pose_path)
+    generate_dataset.generate_pose_dataset(model, first_crop_region, video_path, pose_path,compute_pose=True)
     ## marge ball and pose json
     generate_dataset.generate_multi_dataset(ball_path, pose_path,output_path)
     ## preview result
     preview.generate_video(video_path,output_path,crop_region_path,preview_video_path,first_crop_region)
 
 print(f"task done. {time.time() - start_time:.2f} seconds.")
+
+#False 334.83 seconds.
