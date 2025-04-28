@@ -47,6 +47,7 @@ class PosePredictor(DetectionPredictor):
         """
         super().__init__(cfg, overrides, _callbacks)
         self.args.task = "pose"
+        self.compute_pose = getattr(self.args, "compute_pose", True)
         if isinstance(self.args.device, str) and self.args.device.lower() == "mps":
             LOGGER.warning(
                 "Apple MPS known Pose bug. Recommend 'device=cpu' for Pose models. "
@@ -70,9 +71,8 @@ class PosePredictor(DetectionPredictor):
         Returns:
             (Results): The result object containing the original image, image path, class names, bounding boxes, and keypoints.
         """
-        usePose = True
         result = super().construct_result(pred, img, orig_img, img_path)
-        if usePose:
+        if self.compute_pose:
             # Extract keypoints from prediction and reshape according to model's keypoint shape
             pred_kpts = pred[:, 6:].view(len(pred), *self.model.kpt_shape) if len(pred) else pred[:, 6:]
             # Scale keypoints coordinates to match the original image dimensions
