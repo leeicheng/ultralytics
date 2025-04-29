@@ -245,7 +245,7 @@ class Pose(Detect):
     def __init__(self, nc=80, kpt_shape=(17, 3), ch=(),compute_pose:bool=True):
         """Initialize YOLO network with default parameters and Convolutional Layers."""
         super().__init__(nc, ch)
-        self.compute_pose = compute_pose
+        self.compute_pose = getattr(self.args, "compute_pose", True)
         self.kpt_shape = kpt_shape  # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
         self.nk = kpt_shape[0] * kpt_shape[1]  # number of keypoints total
         c4 = max(ch[0] // 4, self.nk)
@@ -258,7 +258,7 @@ class Pose(Detect):
             kpt = torch.cat([self.cv4[i](x[i]).view(bs, self.nk, -1) for i in range(self.nl)], -1)  # (bs, 17*3, h*w)
             y = Detect.forward(self, x)
             return y, kpt
-        if compute_pose :
+        if self.compute_pose :
             bs = x[0].shape[0]  # batch size
             kpt = torch.cat([self.cv4[i](x[i]).view(bs, self.nk, -1) for i in range(self.nl)], -1)  # (bs, 17*3, h*w)
             y = Detect.forward(self, x)

@@ -71,11 +71,14 @@ class PosePredictor(DetectionPredictor):
         Returns:
             (Results): The result object containing the original image, image path, class names, bounding boxes, and keypoints.
         """
+        self.compute_pose = getattr(self.args, "compute_pose", True)
         result = super().construct_result(pred, img, orig_img, img_path)
-        if self.compute_pose:
+
+        if pred.shape[1] <= 6:
+            return result
             # Extract keypoints from prediction and reshape according to model's keypoint shape
-            pred_kpts = pred[:, 6:].view(len(pred), *self.model.kpt_shape) if len(pred) else pred[:, 6:]
-            # Scale keypoints coordinates to match the original image dimensions
-            pred_kpts = ops.scale_coords(img.shape[2:], pred_kpts, orig_img.shape)
-            result.update(keypoints=pred_kpts)
+        pred_kpts = pred[:, 6:].view(len(pred), *self.model.kpt_shape) if len(pred) else pred[:, 6:]
+        # Scale keypoints coordinates to match the original image dimensions
+        pred_kpts = ops.scale_coords(img.shape[2:], pred_kpts, orig_img.shape)
+        result.update(keypoints=pred_kpts)
         return result

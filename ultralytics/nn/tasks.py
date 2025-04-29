@@ -151,7 +151,9 @@ class BaseModel(torch.nn.Module):
             (torch.Tensor): The last output of the model.
         """
         y, dt, embeddings = [], [], []  # outputs
+        self.compute_pose = compute_pose
         for m in self.model:
+            m.compute_pose = compute_pose
             if m.f != -1:  # if not from previous layer
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
