@@ -139,6 +139,7 @@ class BasePredictor:
         self.callbacks = _callbacks or callbacks.get_default_callbacks()
         self.txt_path = None
         self._lock = threading.Lock()  # for automatic thread-safe inference
+        self.ch = self.args.get("ch", 3)
         callbacks.add_integration_callbacks(self)
 
     def preprocess(self, im):
@@ -151,12 +152,17 @@ class BasePredictor:
         not_tensor = not isinstance(im, torch.Tensor)
         if not_tensor:
             im = np.stack(self.pre_transform(im))
+            if self.ch > 1:
+                im = im[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW, (n, 3, h, w)
+
             if im.shape[-1] == 3:
                 im = im[..., ::-1]  # BGR to RGB
             im = im.transpose((0, 3, 1, 2))  # BHWC to BCHW, (n, 3, h, w)
             im = np.ascontiguousarray(im)  # contiguous
             im = torch.from_numpy(im)
 
+            if self.ch == 1:
+                im = im.unsqueeze(1)
         im = im.to(self.device)
         im = im.half() if self.model.fp16 else im.float()  # uint8 to fp16/32
         if not_tensor:
@@ -247,12 +253,18 @@ class BasePredictor:
                 Source for inference.
         """
         self.imgsz = check_imgsz(self.args.imgsz, stride=self.model.stride, min_dim=2)  # check image size
+        # self.transforms = (
+        #     getattr(
+        #         self.model.model,
+        #         "transforms",
+        #         classify_transforms(self.imgsz[0]),
+        #     )
+        #     if self.args.task == "classify"
+        #     else None
+        # )
         self.transforms = (
-            getattr(
-                self.model.model,
-                "transforms",
-                classify_transforms(self.imgsz[0]),
-            )
+            classify_transforms(self.imgsz[0], crop_fraction=self.args.crop_fraction, mean=[0] * self.ch,
+                                std=[1] * self.ch)
             if self.args.task == "classify"
             else None
         )
@@ -304,9 +316,13 @@ class BasePredictor:
 
             # Warmup model
             if not self.done_warmup:
-                self.model.warmup(
-                    imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, self.model.ch, *self.imgsz)
-                )
+                try:
+                    self.model.warmup(
+                        imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, self.ch, *self.imgsz))
+                except RuntimeError:
+                    self.ch = 1
+                    self.model.warmup(
+                        imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, self.ch, *self.imgsz))
                 self.done_warmup = True
 
             self.seen, self.windows, self.batch = 0, [], None
@@ -322,7 +338,19 @@ class BasePredictor:
 
                 # Preprocess
                 with profilers[0]:
-                    im = self.preprocess(im0s)
+                    # im = self.preprocess(im0s)
+                    try:
+                        im = self.preprocess(im0s)
+                    except RuntimeError:
+                        # If the channel wasn't specified correctly, try with 1 channel
+                        self.ch = 1
+                        self.transforms = (
+                            classify_transforms(self.imgsz[0], crop_fraction=self.args.crop_fraction,
+                                                mean=[0] * self.ch, std=[1] * self.ch)
+                            if self.args.task == "classify"
+                            else None
+                        )
+                        im = self.preprocess(im0s)
 
                 # Inference
                 with profilers[1]:

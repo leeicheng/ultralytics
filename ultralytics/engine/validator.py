@@ -190,7 +190,8 @@ class BaseValidator:
             self.dataloader = self.dataloader or self.get_dataloader(self.data.get(self.args.split), self.args.batch)
 
             model.eval()
-            model.warmup(imgsz=(1 if pt else self.args.batch, self.data["channels"], imgsz, imgsz))  # warmup
+            # model.warmup(imgsz=(1 if pt else self.args.batch, self.data["channels"], imgsz, imgsz))  # warmup
+            model.warmup(imgsz=(1 if pt else self.args.batch, self.args.get("ch", 3), imgsz, imgsz))
 
         self.run_callbacks("on_val_start")
         dt = (
@@ -207,6 +208,13 @@ class BaseValidator:
             self.batch_i = batch_i
             # Preprocess
             with dt[0]:
+                if self.args.get("ch", 3) == 1:
+                    # Before preprocess, transform the batch from bgr to grayscale
+                    bgr_weights = torch.tensor([0.114, 0.587, 0.299]).to(device=self.device)
+                    batch["img"] = (
+                            batch["img"].to(device=self.device) * bgr_weights.view(1, 3, 1, 1)
+                    ).sum(dim=1, keepdim=True)
+
                 batch = self.preprocess(batch)
 
             # Inference

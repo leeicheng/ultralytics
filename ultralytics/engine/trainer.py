@@ -158,6 +158,8 @@ class BaseTrainer:
         if RANK in {-1, 0}:
             callbacks.add_integration_callbacks(self)
 
+        self.bgr_weights = torch.tensor([0.114, 0.587, 0.299]).to(device=self.device)
+
     def add_callback(self, event: str, callback):
         """Append the given callback to the event's callback list."""
         self.callbacks[event].append(callback)
@@ -380,6 +382,11 @@ class BaseTrainer:
 
                 # Forward
                 with autocast(self.amp):
+                    if self.args.get("ch", 3) == 1:
+                        batch["img"] = (
+                                batch["img"].to(device=self.device) * self.bgr_weights.view(1, 3, 1, 1)
+                        ).sum(dim=1, keepdim=True)
+
                     batch = self.preprocess_batch(batch)
                     loss, self.loss_items = self.model(batch)
                     self.loss = loss.sum()

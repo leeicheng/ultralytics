@@ -127,3 +127,6 @@ tracker: botsort.yaml # (str) tracker type, choices=[botsort.yaml, bytetrack.yam
 
 # My Settings
 compute_pose: True
+
+# Grayscale
+ch: 3
