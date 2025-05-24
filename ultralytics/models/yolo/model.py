@@ -2,9 +2,13 @@
 
 from pathlib import Path
 
+import torch
+from torch import nn
+
 from ultralytics.data.build import load_inference_source
 from ultralytics.engine.model import Model
 from ultralytics.models import yolo
+from ultralytics.nn.gray_scale_preprocess import GrayScaleLayer
 from ultralytics.nn.tasks import (
     ClassificationModel,
     DetectionModel,
@@ -353,3 +357,99 @@ class YOLOE(Model):
             self.predictor = None  # reset predictor
 
         return super().predict(source, stream, **kwargs)
+
+# 先灰階再進原模型，並轉發屬性 ----------------
+class GrayWrapper(nn.Module):
+    def __init__(self, base):
+        super().__init__()
+        self.pre  = GrayScaleLayer().eval()
+        for p in self.pre.parameters():
+            p.requires_grad = False
+        self.base = base          # PoseModel 本體
+
+    def forward(self, x, *args, **kw):
+        return self.base(self.pre(x), *args, **kw)
+
+    # 把 yaml / names / stride ... 都交給 base
+    def __getattr__(self, name):
+        if name in {"pre", "base"}:
+            return super().__getattr__(name)
+        return getattr(self.base, name)
+
+class GrayYOLO(Model):
+    """Ultralytics YOLO with an in-graph Gray-scale layer + 1-ch Conv"""
+    def __init__(self, model="yolov8n-pose.pt", *args, **kw):
+        super().__init__(model=model, *args, **kw)
+
+        layers = self.model.model  # 原 ModuleList
+
+        # 1.插入灰階層
+        gray = GrayScaleLayer().eval()
+        gray.requires_grad_(False)
+        layers.insert(0, gray)  # 直接塞 index 0
+
+        # 2.整體右移 m.f**  (除了 -1)
+        for m in layers[1:]:  # 跳過灰階層本身
+            if hasattr(m, "f"):
+                if isinstance(m.f, int):
+                    m.f = m.f + 1 if m.f != -1 else -1
+                else:  # list
+                    m.f = [fi + 1 if fi != -1 else -1 for fi in m.f]
+        self.model.save = [si + 1 if si != -1 else -1 for si in self.model.save]
+
+        # 3.把原第一層 conv 改 1-ch
+        first = layers[1]  # 右移後的 index 1
+        conv = first.conv if hasattr(first, "conv") else first
+        new_conv = nn.Conv2d(
+            1, conv.out_channels, conv.kernel_size,
+            stride=conv.stride, padding=conv.padding,
+            bias=conv.bias is not None
+        )
+        with torch.no_grad():
+            new_conv.weight.copy_(conv.weight.mean(1, keepdim=True))
+            if conv.bias is not None:
+                new_conv.bias.copy_(conv.bias)
+        if hasattr(first, "conv"):
+            first.conv = new_conv
+        else:
+            layers[1] = new_conv
+
+        # 4.重新編號 .i / .type
+        for i, m in enumerate(layers):
+            m.i = i
+            if not hasattr(m, "type"):
+                m.type = m.__class__.__name__.lower()
+
+        # 5.覆蓋回模型
+        self.model.model = layers
+
+    # ---- 延遲 patch：每次用之前再同步 -------------------------
+    def _sync_submodules(self):
+        for name in ("predictor", "validator", "trainer"):
+            obj = getattr(self, name, None)
+            if obj is not None:
+                obj.model = self.model
+
+    # override 這三個入口，先同步再調用父類
+    def predict(self, *a, **k):
+        self._sync_submodules()
+        return super().predict(*a, **k)
+
+    def val(self, *a, **k):
+        self._sync_submodules()
+        return super().val(*a, **k)
+
+    def train(self, *a, **k):
+        self._sync_submodules()
+        return super().train(*a, **k)
+
+    @property
+    def task_map(self):
+        return {
+            "pose": {  # <-- 這跟 self.task='pose' 對應
+                "model": PoseModel,
+                "trainer": yolo.pose.PoseTrainer,
+                "validator": yolo.pose.PoseValidator,
+                "predictor": yolo.pose.PosePredictor,
+            }
+        }
