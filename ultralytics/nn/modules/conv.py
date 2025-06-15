@@ -6,6 +6,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 __all__ = (
     "Conv",
@@ -70,12 +71,15 @@ class Conv(nn.Module):
         """
         Apply convolution, batch normalization and activation to input tensor.
 
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            (torch.Tensor): Output tensor.
+        Supports single-channel (grayscale) input by computing weighted combination of conv weights.
         """
+        if x.dim() == 4 and x.size(1) == 1 and self.conv.in_channels == 3:
+            w = self.conv.weight
+            gray_w = w[:, 0:1, :, :] * 0.299 + w[:, 1:2, :, :] * 0.587 + w[:, 2:3, :, :] * 0.114
+            x = F.conv2d(x, gray_w, bias=None, stride=self.conv.stride, padding=self.conv.padding,
+                         dilation=self.conv.dilation, groups=self.conv.groups)
+            x = self.bn(x)
+            return self.act(x)
         return self.act(self.bn(self.conv(x)))
 
     def forward_fuse(self, x):
