@@ -351,7 +351,7 @@ class VideoFrameExtractor(QMainWindow):
         
         train_dir = base_dir / "train"
         test_dir = base_dir / "test"
-        valid_dir = base_dir / "valid"
+        valid_dir = base_dir / "val"
         
         for dir_path in [train_dir, test_dir, valid_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)

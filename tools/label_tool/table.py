@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QTableWidget, QAbstractItemView, QTableWidgetItem
 
-import constants
+from tools.label_tool import constants
+
 
 class PointTable(QTableWidget):
     """Table widget to display point annotations."""

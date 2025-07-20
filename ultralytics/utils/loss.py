@@ -438,6 +438,24 @@ class v8SegmentationLoss(v8DetectionLoss):
         return loss / fg_mask.sum()
 
 
+class CustomKeypointLoss(nn.Module):
+    """Criterion class for computing keypoint losses without area normalization."""
+
+    def __init__(self, sigmas) -> None:
+        """Initialize the CustomKeypointLoss class with keypoint sigmas."""
+        super().__init__()
+        self.sigmas = sigmas
+
+    def forward(self, pred_kpts, gt_kpts, kpt_mask, area=1.0):  # Area is ignored
+        """Calculate keypoint loss factor and Euclidean distance loss for keypoints."""
+        d = (pred_kpts[..., 0] - gt_kpts[..., 0]).pow(2) + (pred_kpts[..., 1] - gt_kpts[..., 1]).pow(2)
+        kpt_loss_factor = kpt_mask.shape[1] / (torch.sum(kpt_mask != 0, dim=1) + 1e-9)
+        # e = d / (2 * (area * self.sigmas) ** 2 + 1e-9)  # from formula
+        # The key change: remove area from the normalization term.
+        e = d / ((2 * self.sigmas).pow(2) * 2)  # Removed area dependency
+        return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
+
+
 class v8PoseLoss(v8DetectionLoss):
     """Criterion class for computing training losses for YOLOv8 pose estimation."""
 
@@ -450,6 +468,18 @@ class v8PoseLoss(v8DetectionLoss):
         nkpt = self.kpt_shape[0]  # number of keypoints
         sigmas = torch.from_numpy(OKS_SIGMA).to(self.device) if is_pose else torch.ones(nkpt, device=self.device) / nkpt
         self.keypoint_loss = KeypointLoss(sigmas=sigmas)
+
+
+class v8CustomPoseLoss(v8PoseLoss):
+    """Criterion class for computing training losses for YOLOv8 custom pose estimation."""
+
+    def __init__(self, model):  # model must be de-paralleled
+        """Initialize v8CustomPoseLoss with model parameters and keypoint-specific loss functions."""
+        super().__init__(model)
+        is_pose = self.kpt_shape == [17, 3]
+        nkpt = self.kpt_shape[0]  # number of keypoints
+        sigmas = torch.from_numpy(OKS_SIGMA).to(self.device) if is_pose else torch.ones(nkpt, device=self.device) / nkpt
+        self.keypoint_loss = CustomKeypointLoss(sigmas=sigmas)
 
     def __call__(self, preds, batch):
         """Calculate the total loss and detach it for pose estimation."""
@@ -592,6 +622,45 @@ class v8PoseLoss(v8DetectionLoss):
 
         return kpts_loss, kpts_obj_loss
 
+
+class MultiTaskKeypointLoss(nn.Module):
+    def __init__(self, w_obj=1.0, w_cls=1.0, w_kpt=5.0):
+        super().__init__()
+        self.w_obj = w_obj
+        self.w_cls = w_cls
+        self.w_kpt = w_kpt
+
+        self.bce_obj = nn.BCEWithLogitsLoss()
+        self.ce_cls = nn.CrossEntropyLoss()
+        self.smooth_l1 = nn.SmoothL1Loss(reduction='mean')
+
+    def preprocess_targets(self, targets, preds_shape):
+        # This is a placeholder for the actual target preprocessing logic
+        # You will need to implement this based on your specific data format
+        pass
+
+    def forward(self, preds, targets):
+        # Unpack predictions from the custom head
+        pred_obj, pred_cls, pred_kpts = preds
+
+        # Preprocess ground truth targets to match predictions
+        gt_obj_mask, gt_cls, gt_kpts = self.preprocess_targets(targets, pred_obj.shape)
+
+        # Objectness loss
+        loss_obj = self.bce_obj(pred_obj, gt_obj_mask)
+
+        # Classification and regression losses on positive samples
+        pos_mask = gt_obj_mask > 0
+        if pos_mask.sum() > 0:
+            loss_cls = self.ce_cls(pred_cls[pos_mask], gt_cls[pos_mask])
+            loss_kpt = self.smooth_l1(pred_kpts[pos_mask], gt_kpts[pos_mask])
+        else:
+            loss_cls = torch.tensor(0.0).to(preds.device)
+            loss_kpt = torch.tensor(0.0).to(preds.device)
+
+        # Weighted sum of losses
+        total_loss = self.w_obj * loss_obj + self.w_cls * loss_cls + self.w_kpt * loss_kpt
+        return total_loss, torch.stack((loss_obj, loss_cls, loss_kpt)).detach()
 
 class v8ClassificationLoss:
     """Criterion class for computing training losses for classification."""

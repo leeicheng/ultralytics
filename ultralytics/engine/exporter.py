@@ -153,14 +153,14 @@ def validate_args(format, passed_args, valid_args):
     Args:
         format (str): The export format.
         passed_args (Namespace): The arguments used during export.
-        valid_args (list): List of valid arguments for the format.
+        valid_args (list): List of val arguments for the format.
 
     Raises:
         AssertionError: If an unsupported argument is used, or if the format lacks supported argument listings.
     """
     export_args = ["half", "int8", "dynamic", "keras", "nms", "batch", "fraction"]
 
-    assert valid_args is not None, f"ERROR ❌️ valid arguments for '{format}' not listed."
+    assert valid_args is not None, f"ERROR ❌️ val arguments for '{format}' not listed."
     custom = {"batch": 1, "data": None, "device": None}  # exporter defaults
     default_args = get_cfg(DEFAULT_CFG, custom)
     for arg in export_args:
@@ -325,7 +325,7 @@ class Exporter:
         if self.args.int8 and tflite:
             assert not getattr(model, "end2end", False), "TFLite INT8 export not supported for end2end models."
         if self.args.nms:
-            assert not isinstance(model, ClassificationModel), "'nms=True' is not valid for classification models."
+            assert not isinstance(model, ClassificationModel), "'nms=True' is not val for classification models."
             assert not (tflite and ARM64 and LINUX), "TFLite export with NMS unsupported on ARM64 Linux"
             if getattr(model, "end2end", False):
                 LOGGER.warning("'nms=True' is not available for end2end models. Forcing 'nms=False'.")

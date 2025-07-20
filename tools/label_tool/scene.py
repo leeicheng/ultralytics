@@ -22,6 +22,11 @@ class AnnotationScene(QGraphicsScene):
         self.points = []
         self._next_pid = 1
 
+    def clear_points(self):
+        for p in self.points:
+            self.removeItem(p)
+        self.points = []
+
     def _create_point(self, pos: QPointF, ptype: int = 0) -> items.PointItem:
         p = items.PointItem(self._next_pid, pos, ptype)
         self._next_pid += 1

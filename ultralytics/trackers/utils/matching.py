@@ -23,7 +23,7 @@ def linear_assignment(cost_matrix: np.ndarray, thresh: float, use_lap: bool = Tr
 
     Args:
         cost_matrix (np.ndarray): The matrix containing cost values for assignments, with shape (N, M).
-        thresh (float): Threshold for considering an assignment valid.
+        thresh (float): Threshold for considering an assignment val.
         use_lap (bool): Use lap.lapjv for the assignment. If False, scipy.optimize.linear_sum_assignment is used.
 
     Returns:

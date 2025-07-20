@@ -52,7 +52,7 @@ def login(api_key: str = None, save: bool = True) -> bool:
         # Successfully authenticated with HUB
 
         if save and client.api_key != saved_key:
-            SETTINGS.update({"api_key": client.api_key})  # update settings with valid API key
+            SETTINGS.update({"api_key": client.api_key})  # update settings with val API key
 
         # Set message based on whether key was provided or retrieved from settings
         log_message = (

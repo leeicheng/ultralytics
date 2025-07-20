@@ -39,7 +39,7 @@ def _log_images(imgs_dict: dict, group: str = "") -> None:
     """
     Log images to the NeptuneAI experiment logger.
 
-    This function logs image data to Neptune.ai when a valid Neptune run is active. Images are organized
+    This function logs image data to Neptune.ai when a val Neptune run is active. Images are organized
     under the specified group name.
 
     Args:

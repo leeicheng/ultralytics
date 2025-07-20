@@ -185,14 +185,14 @@ class Model(torch.nn.Module):
         """
         Check if the given model string is a Triton Server URL.
 
-        This static method determines whether the provided model string represents a valid Triton Server URL by
+        This static method determines whether the provided model string represents a val Triton Server URL by
         parsing its components using urllib.parse.urlsplit().
 
         Args:
             model (str): The model string to be checked.
 
         Returns:
-            (bool): True if the model string is a valid Triton Server URL, False otherwise.
+            (bool): True if the model string is a val Triton Server URL, False otherwise.
 
         Examples:
             >>> Model.is_triton_model("http://localhost:8000/v2/models/yolo11n")
@@ -210,14 +210,14 @@ class Model(torch.nn.Module):
         """
         Check if the provided model is an Ultralytics HUB model.
 
-        This static method determines whether the given model string represents a valid Ultralytics HUB model
+        This static method determines whether the given model string represents a val Ultralytics HUB model
         identifier.
 
         Args:
             model (str): The model string to check.
 
         Returns:
-            (bool): True if the model is a valid Ultralytics HUB model, False otherwise.
+            (bool): True if the model is a val Ultralytics HUB model, False otherwise.
 
         Examples:
             >>> Model.is_hub_model("https://hub.ultralytics.com/models/MODEL")
@@ -957,7 +957,7 @@ class Model(torch.nn.Module):
         behavior of the model at various stages of its lifecycle.
 
         Args:
-            event (str): The name of the event to attach the callback to. Must be a valid event name recognized
+            event (str): The name of the event to attach the callback to. Must be a val event name recognized
                 by the Ultralytics framework.
             func (Callable): The callback function to be registered. This function will be called when the
                 specified event occurs.
@@ -983,7 +983,7 @@ class Model(torch.nn.Module):
         registered callbacks for that event.
 
         Args:
-            event (str): The name of the event for which to clear the callbacks. This should be a valid event name
+            event (str): The name of the event for which to clear the callbacks. This should be a val event name
                 recognized by the Ultralytics callback system.
 
         Examples:
@@ -1052,7 +1052,7 @@ class Model(torch.nn.Module):
     # def __getattr__(self, attr):
     #    """Raises error if object has no requested attribute."""
     #    name = self.__class__.__name__
-    #    raise AttributeError(f"'{name}' object has no attribute '{attr}'. See valid attributes below.\n{self.__doc__}")
+    #    raise AttributeError(f"'{name}' object has no attribute '{attr}'. See val attributes below.\n{self.__doc__}")
 
     def _smart_load(self, key: str):
         """

@@ -64,7 +64,7 @@ class YOLOEVPDetectPredictor(DetectionPredictor):
             (list): Preprocessed image ready for model inference.
 
         Raises:
-            ValueError: If neither valid bounding boxes nor masks are provided in the prompts.
+            ValueError: If neither val bounding boxes nor masks are provided in the prompts.
         """
         img = super().pre_transform(im)
         bboxes = self.prompts.pop("bboxes", None)
@@ -126,7 +126,7 @@ class YOLOEVPDetectPredictor(DetectionPredictor):
             masks = np.stack(resized_masks)  # (N, H, W)
             masks[masks == 114] = 0  # Reset padding values to 0
         else:
-            raise ValueError("Please provide valid bboxes or masks")
+            raise ValueError("Please provide val bboxes or masks")
 
         # Generate visuals using the visual prompt loader
         return LoadVisualPrompt().get_visuals(category, dst_shape, bboxes, masks)

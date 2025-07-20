@@ -33,7 +33,7 @@ from ultralytics.utils import (
     yaml_print,
 )
 
-# Define valid solutions
+# Define val solutions
 SOLUTION_MAP = {
     "count": "ObjectCounter",
     "crop": "ObjectCropper",
@@ -50,7 +50,7 @@ SOLUTION_MAP = {
     "help": None,
 }
 
-# Define valid tasks and modes
+# Define val tasks and modes
 MODES = frozenset({"train", "val", "predict", "export", "track", "benchmark"})
 TASKS = frozenset({"detect", "segment", "classify", "pose", "obb"})
 TASK2DATA = {
@@ -338,8 +338,8 @@ def check_cfg(cfg: Dict, hard: bool = True) -> None:
 
     Examples:
         >>> config = {
-        ...     "epochs": 50,  # valid integer
-        ...     "lr0": 0.01,  # valid float
+        ...     "epochs": 50,  # val integer
+        ...     "lr0": 0.01,  # val float
         ...     "momentum": 1.2,  # invalid float (out of 0.0-1.0 range)
         ...     "save": "true",  # invalid bool
         ... }
@@ -465,7 +465,7 @@ def check_dict_alignment(base: Dict, custom: Dict, e: Exception = None) -> None:
     messages for mismatched keys.
 
     Args:
-        base (dict): The base configuration dictionary containing valid keys.
+        base (dict): The base configuration dictionary containing val keys.
         custom (dict): The custom configuration dictionary to be checked for alignment.
         e (Exception | None): Optional error instance passed by the calling function.
 
@@ -481,7 +481,7 @@ def check_dict_alignment(base: Dict, custom: Dict, e: Exception = None) -> None:
         ...     print("Mismatched keys found")
 
     Notes:
-        - Suggests corrections for mismatched keys based on similarity to valid keys.
+        - Suggests corrections for mismatched keys based on similarity to val keys.
         - Automatically replaces deprecated keys in the custom configuration with updated equivalents.
         - Prints detailed error messages for each mismatched key to help users correct their configurations.
     """
@@ -495,7 +495,7 @@ def check_dict_alignment(base: Dict, custom: Dict, e: Exception = None) -> None:
             matches = get_close_matches(x, base_keys)  # key list
             matches = [f"{k}={base[k]}" if base.get(k) is not None else k for k in matches]
             match_str = f"Similar arguments are i.e. {matches}." if matches else ""
-            string += f"'{colorstr('red', 'bold', x)}' is not a valid YOLO argument. {match_str}\n"
+            string += f"'{colorstr('red', 'bold', x)}' is not a val YOLO argument. {match_str}\n"
         raise SyntaxError(string + CLI_HELP_MSG) from e
 
 
@@ -694,7 +694,7 @@ def handle_yolo_solutions(args: List[str]) -> None:
         solution_name = args.pop(0)  # Extract the solution name directly
     else:
         LOGGER.warning(
-            f"❌ '{args[0]}' is not a valid solution. 💡 Defaulting to 'count'.\n"
+            f"❌ '{args[0]}' is not a val solution. 💡 Defaulting to 'count'.\n"
             f"🚀 Available solutions: {', '.join(list(SOLUTION_MAP.keys())[:-1])}\n"
         )
         solution_name = "count"  # Default for invalid solution
@@ -902,7 +902,7 @@ def entrypoint(debug: str = "") -> None:
             overrides[a] = True  # auto-True for default bool args, i.e. 'yolo show' sets show=True
         elif a in DEFAULT_CFG_DICT:
             raise SyntaxError(
-                f"'{colorstr('red', 'bold', a)}' is a valid YOLO argument but is missing an '=' sign "
+                f"'{colorstr('red', 'bold', a)}' is a val YOLO argument but is missing an '=' sign "
                 f"to set its value, i.e. try '{a}={DEFAULT_CFG_DICT[a]}'\n{CLI_HELP_MSG}"
             )
         else:

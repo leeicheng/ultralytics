@@ -287,7 +287,7 @@ class RF100Benchmark:
         with open(path, encoding="utf-8") as file:
             yaml_data = yaml.safe_load(file)
         yaml_data["train"] = "train/images"
-        yaml_data["val"] = "valid/images"
+        yaml_data["val"] = "val/images"
         with open(path, "w", encoding="utf-8") as file:
             yaml.safe_dump(yaml_data, file)
 

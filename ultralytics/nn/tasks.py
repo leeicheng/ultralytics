@@ -77,6 +77,7 @@ from ultralytics.utils.loss import (
     v8DetectionLoss,
     v8OBBLoss,
     v8PoseLoss,
+    v8CustomPoseLoss,  # Import the custom loss
     v8SegmentationLoss,
 )
 from ultralytics.utils.ops import make_divisible
@@ -496,6 +497,10 @@ class PoseModel(DetectionModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the PoseModel."""
+        # Check if the model is for the custom single-keypoint task
+        if self.yaml.get('kpt_shape') == [1, 3]:
+            LOGGER.info("Using Custom Pose Loss for single keypoint detection.")
+            return v8CustomPoseLoss(self)
         return v8PoseLoss(self)
 
 

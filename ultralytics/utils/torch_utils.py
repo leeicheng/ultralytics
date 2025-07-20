@@ -189,7 +189,7 @@ def select_device(device="", batch=0, newline=False, verbose=True):
             )
             raise ValueError(
                 f"Invalid CUDA 'device={device}' requested."
-                f" Use 'device=cpu' or pass valid CUDA device(s) if available,"
+                f" Use 'device=cpu' or pass val CUDA device(s) if available,"
                 f" i.e. 'device=0' or 'device=0,1,2,3' for Multi-GPU.\n"
                 f"\ntorch.cuda.is_available(): {torch.cuda.is_available()}"
                 f"\ntorch.cuda.device_count(): {torch.cuda.device_count()}"
@@ -204,7 +204,7 @@ def select_device(device="", batch=0, newline=False, verbose=True):
             if batch < 1:
                 raise ValueError(
                     "AutoBatch with batch<1 not supported for Multi-GPU training, "
-                    "please specify a valid batch size, i.e. batch=16."
+                    "please specify a val batch size, i.e. batch=16."
                 )
             if batch >= 0 and batch % n != 0:  # check batch_size is divisible by device_count
                 raise ValueError(
@@ -708,7 +708,7 @@ def strip_optimizer(f: Union[str, Path] = "best.pt", s: str = "", updates: dict 
         assert isinstance(x, dict), "checkpoint is not a Python dictionary"
         assert "model" in x, "'model' missing from checkpoint"
     except Exception as e:
-        LOGGER.warning(f"Skipping {f}, not a valid Ultralytics model: {e}")
+        LOGGER.warning(f"Skipping {f}, not a val Ultralytics model: {e}")
         return {}
 
     metadata = {

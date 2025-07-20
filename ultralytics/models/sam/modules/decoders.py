@@ -465,7 +465,7 @@ class SAM2MaskDecoder(nn.Module):
 
         This method is used when outputting a single mask. If the stability score from the current single-mask
         output (based on output token 0) falls below a threshold, it instead selects from multi-mask outputs
-        (based on output tokens 1-3) the mask with the highest predicted IoU score. This ensures a valid mask
+        (based on output tokens 1-3) the mask with the highest predicted IoU score. This ensures a val mask
         for both clicking and tracking scenarios.
 
         Args:

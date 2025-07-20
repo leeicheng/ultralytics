@@ -74,7 +74,7 @@ def imshow(winname: str, mat: np.ndarray):
     Args:
         winname (str): Name of the window where the image will be displayed. If a window with this name already
             exists, the image will be displayed in that window.
-        mat (np.ndarray): Image to be shown. Should be a valid numpy array representing an image.
+        mat (np.ndarray): Image to be shown. Should be a val numpy array representing an image.
 
     Examples:
         >>> import numpy as np

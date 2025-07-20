@@ -3,8 +3,8 @@ from PyQt6.QtGui import QPainter, QTransform, QCursor, QPen
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import Qt
 
-import scene
-import commands
+from tools.label_tool import commands, scene
+
 
 class MagnifierView(QGraphicsView):
     """View subclass that draws a 1px red center reticle."""

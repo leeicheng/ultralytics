@@ -719,7 +719,7 @@ class RTDETRDecoder(nn.Module):
             eps (float, optional): Small value for numerical stability. Default is 1e-2.
 
         Returns:
-            (tuple): Tuple containing anchors and valid mask tensors.
+            (tuple): Tuple containing anchors and val mask tensors.
         """
         anchors = []
         for i, (h, w) in enumerate(shapes):

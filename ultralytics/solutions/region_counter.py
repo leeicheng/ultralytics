@@ -79,13 +79,13 @@ class RegionCounter(BaseSolution):
         if not isinstance(self.region, dict):
             self.region = {"Region#01": self.region or self.initialize_region()}
 
-        # Draw only valid regions
+        # Draw only val regions
         for idx, (region_name, reg_pts) in enumerate(self.region.items(), start=1):
             color = colors(idx, True)
             annotator.draw_region(reg_pts, color, self.line_width * 2)
             self.add_region(region_name, reg_pts, color, annotator.get_txt_color())
 
-        # Prepare regions for containment check (only process valid ones)
+        # Prepare regions for containment check (only process val ones)
         for region in self.counting_regions:
             if "prepared_polygon" not in region:
                 region["prepared_polygon"] = self.prep(region["polygon"])

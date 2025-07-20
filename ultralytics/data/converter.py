@@ -406,7 +406,7 @@ def convert_segment_masks_to_yolo_seg(masks_dir, output_dir, classes):
                 )  # Find contours
 
                 for contour in contours:
-                    if len(contour) >= 3:  # YOLO requires at least 3 points for a valid segmentation
+                    if len(contour) >= 3:  # YOLO requires at least 3 points for a val segmentation
                         contour = contour.squeeze()  # Remove single-dimensional entries
                         yolo_format = [class_index]
                         for point in contour:

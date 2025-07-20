@@ -427,7 +427,7 @@ class GroundingDataset(YOLODataset):
 
     Examples:
         >>> dataset = GroundingDataset(img_path="path/to/images", json_file="annotations.json", task="detect")
-        >>> len(dataset)  # Number of valid images with annotations
+        >>> len(dataset)  # Number of val images with annotations
     """
 
     def __init__(self, *args, task="detect", json_file="", **kwargs):
@@ -789,7 +789,7 @@ class ClassificationDataset:
         Verify all images in dataset.
 
         Returns:
-            (list): List of valid samples after verification.
+            (list): List of val samples after verification.
         """
         desc = f"{self.prefix}Scanning {self.root}..."
         path = Path(self.root).with_suffix(".cache")  # *.cache file path
