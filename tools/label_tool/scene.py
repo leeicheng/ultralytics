@@ -6,6 +6,7 @@ from typing import List, Dict
 from PyQt6.QtGui import QPixmap
 
 import items
+import constants
 
 class AnnotationScene(QGraphicsScene):
     """Handles image display and point items."""
@@ -27,8 +28,8 @@ class AnnotationScene(QGraphicsScene):
             self.removeItem(p)
         self.points = []
 
-    def _create_point(self, pos: QPointF, ptype: int = 0) -> items.PointItem:
-        p = items.PointItem(self._next_pid, pos, ptype)
+    def _create_point(self, pos: QPointF, ptype: int = 0, visibility: int = constants.VISIBILITY_VISIBLE) -> items.PointItem:
+        p = items.PointItem(self._next_pid, pos, ptype, visibility)
         self._next_pid += 1
         self.points.append(p)
         self.addItem(p)
@@ -45,15 +46,16 @@ class AnnotationScene(QGraphicsScene):
 
     def to_dict(self) -> List[Dict]:
         return [
-            {"id": p.pid, "x": p.pos().x(), "y": p.pos().y(), "type": p.ptype}
+            {"id": p.pid, "x": p.pos().x(), "y": p.pos().y(), "type": p.ptype, "visibility": p.visibility}
             for p in self.points
         ]
 
     def from_dict(self, data: List[Dict]):
         for d in data:
-            p = self._create_point(QPointF(d["x"], d["y"]))
+            # Handle legacy files that may not have the visibility key
+            visibility = d.get("visibility", constants.VISIBILITY_VISIBLE)
+            p = self._create_point(QPointF(d["x"], d["y"]), d["type"], visibility)
             p.pid = d["id"]
-            p.ptype = d["type"]
             p.update_style()
         if self.points:
             self._next_pid = max(p.pid for p in self.points) + 1

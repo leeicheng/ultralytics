@@ -68,9 +68,11 @@ class AugmentationPreviewDialog(QDialog):
             view.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
             for point in points:
-                x, y, ptype = point['x'], point['y'], point['type']
+                x, y, ptype, visibility = point['x'], point['y'], point['type'], point['visibility']
                 color = constants.TYPE_COLORS[ptype]
                 pen = QPen(color)
+                if visibility == constants.VISIBILITY_OCCLUDED:
+                    pen.setStyle(Qt.PenStyle.DashLine)
                 brush = QBrush(color)
                 radius = constants.POINT_RADIUS * 2
                 scene.addEllipse(x - radius, y - radius, 2 * radius, 2 * radius, pen, brush)
@@ -201,7 +203,7 @@ class MainWindow(QMainWindow):
     """Main application window."""
     def __init__(self, folder: Path = None):
         super().__init__()
-        self.setWindowTitle("Badminton Court Annotator v0.5")
+        self.setWindowTitle("Badminton Court Annotator v0.7")
         self.resize(1200, 800)
 
         self.folder = folder
@@ -267,6 +269,10 @@ class MainWindow(QMainWindow):
                            triggered=self.open_folder_dialog)
         save_act = QAction("&Save", self, shortcut=QKeySequence.StandardKey.Save,
                            triggered=self.save_project_if_needed)
+        apply_to_all_act = QAction("Apply to All", self,
+                                   triggered=self.confirm_apply_to_all)
+        apply_to_all_act.setToolTip("Apply the current annotations to all other images in the folder.")
+        
         export_act = QAction("&Export Current CSV", self, triggered=self.export_current_csv)
         export_yolo_act = QAction("Export Current &YOLO", self, triggered=self.export_current_yolo)
         export_batch_act = QAction("Export &Batch YOLO", self, triggered=self.export_batch_yolo)
@@ -281,9 +287,13 @@ class MainWindow(QMainWindow):
         self.grid_act = QAction("&Grid", self, checkable=True,
                                 shortcut=QKeySequence("G"),
                                 triggered=self.toggle_grid)
+        self.toggle_visibility_act = QAction("Toggle &Visibility", self, 
+                                           shortcut=QKeySequence("V"), 
+                                           triggered=self.toggle_visibility_selected)
+
         toolbar = QToolBar("Main")
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
-        toolbar.addActions([open_act, save_act, export_act, export_yolo_act, export_batch_act, undo_act, redo_act])
+        toolbar.addActions([open_act, save_act, apply_to_all_act, export_act, export_yolo_act, export_batch_act, undo_act, redo_act])
         
         mag_in_act = QAction("Zoom+ (Magnifier)", self,
                              shortcut=QKeySequence("+"),
@@ -297,6 +307,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.RightToolBarArea, side_toolbar)
         side_toolbar.addAction(self.homography_act)
         side_toolbar.addAction(self.grid_act)
+        side_toolbar.addAction(self.toggle_visibility_act)
         side_toolbar.addAction(mag_in_act)
         side_toolbar.addAction(mag_out_act)
         
@@ -387,6 +398,56 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed",
                                  f"Could not save project. Backup at {backup}\n{ex}")
 
+    def confirm_apply_to_all(self):
+        if self.current_index < 0:
+            QMessageBox.warning(self, "No Image Selected", "Please select an image first.")
+            return
+
+        reply = QMessageBox.question(self, "Confirm Action",
+                                     "This will overwrite the annotations for all other images in this folder "
+                                     "with the points from the current image.\n\n"
+                                     "<b>This action cannot be undone.</b><br><br>"
+                                     "Are you sure you want to proceed?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                                     QMessageBox.StandardButton.Cancel)
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.apply_to_all()
+
+    def apply_to_all(self):
+        current_points = self.scene.to_dict()
+        if not current_points:
+            QMessageBox.warning(self, "No Annotations", "There are no annotations on the current image to apply.")
+            return
+
+        current_img_path = self.images[self.current_index]
+        other_images = [img for img in self.images if img != current_img_path]
+        
+        progress = QProgressDialog("Applying annotations to all images...", "Cancel", 0, len(other_images), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+
+        for i, img_path in enumerate(other_images):
+            progress.setValue(i)
+            if progress.wasCanceled():
+                break
+
+            pj = img_path.with_suffix(constants.PROJECT_EXT)
+            try:
+                data = {"points": current_points}
+                tmp = pj.with_suffix(pj.suffix + ".tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                tmp.replace(pj)
+            except Exception as ex:
+                QMessageBox.critical(self, "Apply Failed", f"Could not apply annotations to {img_path.name}.\n{ex}")
+                progress.cancel()
+                return
+        
+        progress.setValue(len(other_images))
+        QMessageBox.information(self, "Success", f"Successfully applied annotations to {len(other_images)} other images.")
+
+
     def update_table(self):
         self.point_table.load_points(self.scene.points)
         self.points_count_label.setText(f"Points: {len(self.scene.points)}")
@@ -411,9 +472,9 @@ class MainWindow(QMainWindow):
         img = self.images[self.current_index]
         out = img.with_suffix(".csv")
         with open(out, "w", newline="", encoding="utf-8") as f:
-            f.write("id,x,y,type\n")
+            f.write("id,x,y,type,visibility\n")
             for p in self.scene.points:
-                f.write(f"{p.pid},{p.pos().x():.1f},{p.pos().y():.1f},{p.ptype}\n")
+                f.write(f"{p.pid},{p.pos().x():.1f},{p.pos().y():.1f},{p.ptype},{p.visibility}\n")
         self.status.showMessage(f"Exported {out.name}")
 
     def export_current_yolo(self):
@@ -432,7 +493,7 @@ class MainWindow(QMainWindow):
             for p in self.scene.points:
                 x_norm = max(0, min(1, p.pos().x() / img_width))
                 y_norm = max(0, min(1, p.pos().y() / img_height))
-                f.write(f"{p.ptype} {x_norm:.6f} {y_norm:.6f} 0.010000 0.010000 {x_norm:.6f} {y_norm:.6f} 2\n")
+                f.write(f"{p.ptype} {x_norm:.6f} {y_norm:.6f} 0.010000 0.010000 {x_norm:.6f} {y_norm:.6f} {p.visibility}\n")
         
         self.status.showMessage(f"Exported YOLO format: {out.name}")
 
@@ -442,10 +503,12 @@ class MainWindow(QMainWindow):
         alb_keypoints = []
         class_ids = []
         track_ids = []
+        visibilities = []
         for p in points:
             alb_keypoints.append((p['x'], p['y']))
             class_ids.append(p['type'])
             track_ids.append(p['id'])
+            visibilities.append(p['visibility'])
 
         transforms_list = []
 
@@ -463,9 +526,9 @@ class MainWindow(QMainWindow):
         if not transforms_list:
             return img, points
 
-        transform = A.Compose(transforms_list, keypoint_params=A.KeypointParams(format='xy', label_fields=['class_ids', 'track_ids']))
+        transform = A.Compose(transforms_list, keypoint_params=A.KeypointParams(format='xy', label_fields=['class_ids', 'track_ids', 'visibilities']))
 
-        transformed = transform(image=img, keypoints=alb_keypoints, class_ids=class_ids, track_ids=track_ids)
+        transformed = transform(image=img, keypoints=alb_keypoints, class_ids=class_ids, track_ids=track_ids, visibilities=visibilities)
         augmented_img = transformed['image']
         
         augmented_points = []
@@ -473,8 +536,9 @@ class MainWindow(QMainWindow):
             x, y = kp
             class_id = transformed['class_ids'][i]
             track_id = transformed['track_ids'][i]
+            visibility = transformed['visibilities'][i]
             if 0 <= x < w and 0 <= y < h:
-                augmented_points.append({'id': track_id, 'x': x, 'y': y, 'type': class_id})
+                augmented_points.append({'id': track_id, 'x': x, 'y': y, 'type': class_id, 'visibility': visibility})
         
         return augmented_img, augmented_points
 
@@ -625,7 +689,7 @@ class MainWindow(QMainWindow):
                     for p in points_to_save:
                         x_norm = max(0, min(1, p['x'] / w))
                         y_norm = max(0, min(1, p['y'] / h))
-                        f.write(f"{p['type']} {x_norm:.6f} {y_norm:.6f} 0.01 0.01 {x_norm:.6f} {y_norm:.6f} 2\n")
+                        f.write(f"{p['type']} {x_norm:.6f} {y_norm:.6f} 0.01 0.01 {x_norm:.6f} {y_norm:.6f} {p['visibility']}\n")
 
         progress_dialog.close()
         QMessageBox.information(self, "Export Complete", f"Batch export completed to:\n{dataset_root}")
@@ -640,6 +704,21 @@ class MainWindow(QMainWindow):
         for p in pts:
             if p.ptype != new_t:
                 self.undo_stack.push(commands.ChangeTypeCommand(p, p.ptype, new_t))
+
+    def change_visibility_selected(self, new_v: int):
+        pts = [it for it in self.scene.selectedItems() if hasattr(it, "visibility")]
+        for p in pts:
+            if p.visibility != new_v:
+                self.undo_stack.push(commands.ChangeVisibilityCommand(p, p.visibility, new_v))
+
+    def toggle_visibility_selected(self):
+        pts = [it for it in self.scene.selectedItems() if hasattr(it, "visibility")]
+        if not pts:
+            return
+        # Toggle based on the first selected point's state
+        current_vis = pts[0].visibility
+        new_vis = constants.VISIBILITY_OCCLUDED if current_vis == constants.VISIBILITY_VISIBLE else constants.VISIBILITY_VISIBLE
+        self.change_visibility_selected(new_vis)
 
     def set_default_ptype(self, t: int):
         self.default_ptype = t

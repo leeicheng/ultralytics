@@ -1,18 +1,19 @@
 from PyQt6.QtWidgets import QGraphicsItem, QMenu
 from PyQt6.QtCore import QPointF, Qt, QRectF
-from PyQt6.QtGui import QCursor, QColor, QPen, QBrush, QPolygonF
+from PyQt6.QtGui import QCursor, QColor, QPen, QBrush, QPolygonF, QAction, QActionGroup
 
 import constants
 
 class PointItem(QGraphicsItem):
     """Interactive point item."""
-    def __init__(self, pid: int, pos: QPointF, ptype: int = 0):
+    def __init__(self, pid: int, pos: QPointF, ptype: int = 0, visibility: int = constants.VISIBILITY_VISIBLE):
         super().__init__()
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setCursor(QCursor(Qt.CursorShape.SizeAllCursor))
         self.pid = pid
         self.ptype = ptype
+        self.visibility = visibility
         self.setPos(pos)
         self._drag_start = None
         self.update_style()
@@ -26,9 +27,17 @@ class PointItem(QGraphicsItem):
         # border: solid type color; fill: semi-transparent
         base_color = QColor(constants.TYPE_COLORS[self.ptype])
         fill_color = QColor(base_color)
-        fill_color.setAlpha(100)
+        
+        if self.visibility == constants.VISIBILITY_VISIBLE:
+            fill_color.setAlpha(100)
+            self._pen = QPen(base_color)
+            self._pen.setStyle(Qt.PenStyle.SolidLine)
+        else: # Occluded
+            fill_color.setAlpha(50)
+            self._pen = QPen(base_color)
+            self._pen.setStyle(Qt.PenStyle.DashLine)
+
         self._brush = QBrush(fill_color)
-        self._pen = QPen(base_color)
         self._pen.setWidth(1)
         self.update() # Request a repaint
 
@@ -94,8 +103,31 @@ class PointItem(QGraphicsItem):
         menu = QMenu()
         delete_act = menu.addAction(f"Delete Point {self.pid}")
         delete_act.triggered.connect(lambda _=False: self.scene().parent().window().delete_selected())
+        
         menu.addSeparator()
+
+        # Visibility submenu
+        visibility_menu = menu.addMenu("Visibility")
+        vis_group = QActionGroup(visibility_menu)
+        for vis_code, vis_name in constants.VISIBILITY_NAMES.items():
+            act = QAction(f"Set to {vis_name}", visibility_menu)
+            act.setCheckable(True)
+            act.setChecked(self.visibility == vis_code)
+            act.triggered.connect(lambda _, v=vis_code: self.scene().parent().window().change_visibility_selected(v))
+            visibility_menu.addAction(act)
+            vis_group.addAction(act)
+
+        menu.addSeparator()
+        
+        # Type submenu
+        type_menu = menu.addMenu("Type")
+        type_group = QActionGroup(type_menu)
         for t, name in constants.TYPE_NAMES.items():
-            act = menu.addAction(f"Set type {t} – {name}")
-            act.triggered.connect(lambda _=False, tt=t: self.scene().parent().window().change_type_selected(tt))
+            act = QAction(f"Set type {t} – {name}", type_menu)
+            act.setCheckable(True)
+            act.setChecked(self.ptype == t)
+            act.triggered.connect(lambda _, tt=t: self.scene().parent().window().change_type_selected(tt))
+            type_menu.addAction(act)
+            type_group.addAction(act)
+            
         menu.exec(event.screenPos())

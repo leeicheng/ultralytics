@@ -5,7 +5,7 @@ from tools.label_tool import constants
 
 class PointTable(QTableWidget):
     """Table widget to display point annotations."""
-    HEADERS = ["ID", "X", "Y", "Type"]
+    HEADERS = ["ID", "X", "Y", "Type", "Visibility"]
 
     def __init__(self, parent=None):
         super().__init__(0, len(self.HEADERS), parent)
@@ -20,3 +20,5 @@ class PointTable(QTableWidget):
             self.setItem(row, 1, QTableWidgetItem(f"{p.pos().x():.1f}"))
             self.setItem(row, 2, QTableWidgetItem(f"{p.pos().y():.1f}"))
             self.setItem(row, 3, QTableWidgetItem(constants.TYPE_NAMES[p.ptype]))
+            visibility_str = constants.VISIBILITY_NAMES.get(p.visibility, "Unknown")
+            self.setItem(row, 4, QTableWidgetItem(visibility_str))

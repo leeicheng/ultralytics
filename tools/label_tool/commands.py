@@ -6,6 +6,7 @@ from typing import List
 
 import scene
 import items
+import constants
 
 class AddPointCommand(QUndoCommand):
     """Undoable command to add a point with specified type."""
@@ -50,7 +51,7 @@ class DeletePointCommand(QUndoCommand):
             self.scene._reinsert_point(p)
 
 class MovePointCommand(QUndoCommand):
-    """Undoable command to move a point."""
+    """Undoadoable command to move a point."""
     def __init__(self, point: items.PointItem, old_pos: QPointF, new_pos: QPointF):
         super().__init__("Move point")
         self.point = point
@@ -77,4 +78,20 @@ class ChangeTypeCommand(QUndoCommand):
 
     def undo(self):
         self.point.ptype = self.old
+        self.point.update_style()
+
+class ChangeVisibilityCommand(QUndoCommand):
+    """Undoable command to change point visibility."""
+    def __init__(self, point: items.PointItem, old_v: int, new_v: int):
+        super().__init__("Change visibility")
+        self.point = point
+        self.old = old_v
+        self.new = new_v
+
+    def redo(self):
+        self.point.visibility = self.new
+        self.point.update_style()
+
+    def undo(self):
+        self.point.visibility = self.old
         self.point.update_style()
