@@ -220,6 +220,9 @@ class BaseDataset(Dataset):
             if fn.exists():  # load npy
                 try:
                     im = np.load(fn)
+                    # Check if cached image needs preprocessing (3->4 channels)
+                    if len(im.shape) == 3 and im.shape[2] == 3:
+                        im = self._apply_enhanced_canny_preprocessing(im)
                 except Exception as e:
                     LOGGER.warning(f"{self.prefix}Removing corrupt *.npy image file {fn} due to: {e}")
                     Path(fn).unlink(missing_ok=True)
@@ -228,6 +231,10 @@ class BaseDataset(Dataset):
                 im = imread(f)  # BGR
             if im is None:
                 raise FileNotFoundError(f"Image Not Found {f}")
+
+            # Apply Enhanced Canny preprocessing if image is 3-channel
+            if len(im.shape) == 3 and im.shape[2] == 3:
+                im = self._apply_enhanced_canny_preprocessing(im)
 
             h0, w0 = im.shape[:2]  # orig hw
             if rect_mode:  # resize long side to imgsz while maintaining aspect ratio
@@ -396,6 +403,35 @@ class BaseDataset(Dataset):
     def update_labels_info(self, label):
         """Custom your label format here."""
         return label
+
+    def _apply_enhanced_canny_preprocessing(self, im):
+        """
+        Apply Enhanced Canny preprocessing to create 4-channel input.
+        Processing flow: RGB -> Grayscale -> CLAHE -> Canny -> 4-channel output
+        
+        Args:
+            im (np.ndarray): Input RGB image with shape (H, W, 3)
+            
+        Returns:
+            np.ndarray: 4-channel image with shape (H, W, 4) - RGB + Enhanced Canny
+        """
+        if im.shape[2] != 3:
+            return im  # Already processed or not RGB
+            
+        # Step 1: Convert to grayscale
+        gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        
+        # Step 2: Apply CLAHE to enhance contrast
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe_enhanced = clahe.apply(gray)
+        
+        # Step 3: Apply Canny edge detection on CLAHE-enhanced image
+        enhanced_canny = cv2.Canny(clahe_enhanced, 50, 150, apertureSize=3)
+        
+        # Step 4: Combine RGB + Enhanced Canny to create 4-channel input
+        multi_channel = np.dstack([im, enhanced_canny])
+        
+        return multi_channel
 
     def build_transforms(self, hyp=None):
         """
