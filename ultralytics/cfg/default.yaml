@@ -124,3 +124,11 @@ cfg: # (str, optional) for overriding defaults.yaml
 
 # Tracker settings ------------------------------------------------------------------------------------------------------
 tracker: botsort.yaml # (str) tracker type, choices=[botsort.yaml, bytetrack.yaml]
+
+# Enhanced Canny preprocessing settings --------------------------------------------------------------------------------
+enhanced_canny_enable: True # (bool) enable Enhanced Canny preprocessing for 4-channel models
+clahe_clip_limit: 3.0 # (float) CLAHE clip limit for contrast enhancement
+clahe_tile_grid_size: [8, 8] # (list[int]) CLAHE tile grid size for adaptive histogram equalization
+canny_lower_threshold: 50 # (int) Canny edge detection lower threshold
+canny_upper_threshold: 150 # (int) Canny edge detection upper threshold  
+canny_aperture_size: 3 # (int) Canny edge detection aperture size for Sobel operator

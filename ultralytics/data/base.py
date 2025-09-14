@@ -409,6 +409,8 @@ class BaseDataset(Dataset):
         Apply Enhanced Canny preprocessing to create 4-channel input.
         Processing flow: RGB -> Grayscale -> CLAHE -> Canny -> 4-channel output
         
+        Parameters are loaded from ultralytics/cfg/default.yaml configuration file.
+        
         Args:
             im (np.ndarray): Input RGB image with shape (H, W, 3)
             
@@ -417,16 +419,36 @@ class BaseDataset(Dataset):
         """
         if im.shape[2] != 3:
             return im  # Already processed or not RGB
+        
+        # Load Enhanced Canny parameters from configuration
+        from ultralytics.utils import DEFAULT_CFG
+        
+        # Check if Enhanced Canny is enabled
+        if not DEFAULT_CFG.get('enhanced_canny_enable', True):
+            return im  # Return original image if preprocessing is disabled
+            
+        # Get CLAHE parameters
+        clahe_clip_limit = DEFAULT_CFG.get('clahe_clip_limit', 3.0)
+        clahe_tile_grid = DEFAULT_CFG.get('clahe_tile_grid_size', [8, 8])
+        if isinstance(clahe_tile_grid, list) and len(clahe_tile_grid) == 2:
+            clahe_tile_grid = tuple(clahe_tile_grid)
+        else:
+            clahe_tile_grid = (8, 8)  # fallback
+        
+        # Get Canny parameters
+        canny_lower = DEFAULT_CFG.get('canny_lower_threshold', 50)
+        canny_upper = DEFAULT_CFG.get('canny_upper_threshold', 150)
+        canny_aperture = DEFAULT_CFG.get('canny_aperture_size', 3)
             
         # Step 1: Convert to grayscale
         gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         
         # Step 2: Apply CLAHE to enhance contrast
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=clahe_tile_grid)
         clahe_enhanced = clahe.apply(gray)
         
         # Step 3: Apply Canny edge detection on CLAHE-enhanced image
-        enhanced_canny = cv2.Canny(clahe_enhanced, 50, 150, apertureSize=3)
+        enhanced_canny = cv2.Canny(clahe_enhanced, canny_lower, canny_upper, apertureSize=canny_aperture)
         
         # Step 4: Combine RGB + Enhanced Canny to create 4-channel input
         multi_channel = np.dstack([im, enhanced_canny])
