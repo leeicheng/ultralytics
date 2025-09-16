@@ -477,13 +477,13 @@ class SegmentationModel(DetectionModel):
 class PoseModel(DetectionModel):
     """YOLO pose model."""
 
-    def __init__(self, cfg="yolo11n-pose.yaml", ch=3, nc=None, data_kpt_shape=(None, None), verbose=True):
+    def __init__(self, cfg="yolo11n-pose.yaml", ch=4, nc=None, data_kpt_shape=(None, None), verbose=True):
         """
-        Initialize YOLOv8 Pose model.
+        Initialize YOLOv8 Pose model with 4-channel input support.
 
         Args:
             cfg (str | dict): Model configuration file path or dictionary.
-            ch (int): Number of input channels.
+            ch (int): Number of input channels. Default is 4 for RGB+Enhanced Canny.
             nc (int, optional): Number of classes.
             data_kpt_shape (tuple): Shape of keypoints data.
             verbose (bool): Whether to display model information.
