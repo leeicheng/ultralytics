@@ -38,7 +38,7 @@ class EnhancedKeypointLoss(nn.Module):
         
         # 幾何約束模組
         self.homography_constraint = HomographyConstraint(device)
-        self.symmetry_constraint = SymmetryConstraint(device)
+        # self.symmetry_constraint = SymmetryConstraint(device)
         
     def forward(self, pred_kpts, gt_kpts, kpt_mask, 
                 pred_classes=None, gt_classes=None, **kwargs):
@@ -62,23 +62,27 @@ class EnhancedKeypointLoss(nn.Module):
             homo_loss = self.homography_constraint(pred_xy, gt_classes)
         
         # 3. 對稱性損失
-        sym_loss = torch.tensor(0.0, device=self.device)
-        if pred_classes is not None and gt_classes is not None:
-            pred_xy = pred_kpts[..., :2]
-            sym_loss = self.symmetry_constraint(pred_xy, gt_classes)
+        # sym_loss = torch.tensor(0.0, device=self.device)
+        # if pred_classes is not None and gt_classes is not None:
+        #     pred_xy = pred_kpts[..., :2]
+        #     sym_loss = self.symmetry_constraint(pred_xy, gt_classes)
         
         # 4. 距離比例損失
         ratio_loss = self._compute_distance_ratio_loss(pred_kpts, gt_kpts, kpt_mask)
         
         # 5. 角度約束損失
-        angle_loss = self._compute_angle_constraint_loss(pred_kpts, gt_kpts, kpt_mask)
+        # angle_loss = self._compute_angle_constraint_loss(pred_kpts, gt_kpts, kpt_mask)
         
         # 組合總損失
-        total_loss = (self.w_base * base_loss + 
+        # total_loss = (self.w_base * base_loss +
+        #              self.w_homo * homo_loss +
+        #              self.w_sym * sym_loss +
+        #              self.w_ratio * ratio_loss +
+        #              self.w_angle * angle_loss)
+
+        total_loss = (self.w_base * base_loss +
                      self.w_homo * homo_loss +
-                     self.w_sym * sym_loss +
-                     self.w_ratio * ratio_loss +
-                     self.w_angle * angle_loss)
+                     self.w_ratio * ratio_loss)
         
         return total_loss
     
@@ -95,7 +99,7 @@ class EnhancedKeypointLoss(nn.Module):
         e = d / ((2 * self.sigmas).pow(2) * 2)  # 移除面積項
         
         return (kpt_loss_factor.view(-1, 1) * ((1 - torch.exp(-e)) * kpt_mask)).mean()
-    
+
     def _compute_distance_ratio_loss(self, pred_kpts, gt_kpts, kpt_mask):
         """計算距離比例損失"""
         # 簡化實現 - 確保相對距離保持一致

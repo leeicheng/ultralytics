@@ -29,7 +29,7 @@ class BadmintonCourtGeometry:
         20:T-junction  21:T-junction  22:T-junction  23:T-junction  24:T-junction
         30:T-junction  31:T-junction  32:T-junction  33:T-junction  34:T-junction
         40:T-junction  41:Cross       42:Cross       43:Cross       44:T-junction
-        50:T-junction  51:T-junction  52:T-junction  53:T-junction  54:T-junction
+        50:L-corner  51:T-junction  52:T-junction  53:T-junction  54:L-corner
         """
         
         # 定義6行5列的網格
@@ -53,7 +53,7 @@ class BadmintonCourtGeometry:
             [1, 1, 1, 1, 1],  # 第2行: T-junction, T-junction, T-junction, T-junction, T-junction
             [1, 1, 1, 1, 1],  # 第3行: T-junction, T-junction, T-junction, T-junction, T-junction
             [1, 2, 2, 2, 1],  # 第4行: T-junction, Cross, Cross, Cross, T-junction
-            [1, 1, 1, 1, 1],  # 第5行: T-junction, T-junction, T-junction, T-junction, T-junction
+            [0, 1, 1, 1, 0],  # 第5行: T-junction, T-junction, T-junction, T-junction, T-junction
         ]
         
         intersection_id = 0
@@ -164,10 +164,11 @@ class HomographyConstraint(nn.Module):
         ratio_loss = self._compute_ratio_consistency(pred_distances, expected_dist)
         
         # 計算角度約束
-        angle_loss = self._compute_angle_constraints(points, classes)
+        # angle_loss = self._compute_angle_constraints(points, classes)
         
-        return ratio_loss + 0.5 * angle_loss
-    
+        # return ratio_loss + 0.5 * angle_loss
+        return ratio_loss
+
     def _compute_distance_matrix(self, points: torch.Tensor) -> torch.Tensor:
         """計算點集的距離矩陣"""
         n_points = points.shape[0]
