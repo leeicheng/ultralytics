@@ -199,12 +199,23 @@ def verify_image_label(args):
         if os.path.isfile(lb_file):
             nf = 1  # label found
             with open(lb_file, encoding="utf-8") as f:
-                lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
-                if any(len(x) > 6 for x in lb) and (not keypoint):  # is segment
-                    classes = np.array([x[0] for x in lb], dtype=np.float32)
-                    segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
-                    lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
-                lb = np.array(lb, dtype=np.float32)
+                lb_lines = [x.split() for x in f.read().strip().splitlines() if len(x)]
+            
+            # Custom logic to handle 4-column keypoint format as a 5-column detection format
+            lb = []
+            for line in lb_lines:
+                if len(line) == 4:
+                    # This is our custom format: <class_id> <x> <y> <visibility>
+                    # Convert to: <class_id> <x> <y> <width> <height>
+                    line = [line[0], line[1], line[2], '0.01', '0.01']
+                lb.append(line)
+
+            if any(len(x) > 6 for x in lb) and (not keypoint):  # is segment
+                classes = np.array([x[0] for x in lb], dtype=np.float32)
+                segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
+                lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
+            
+            lb = np.array(lb, dtype=np.float32)
             if nl := len(lb):
                 if keypoint:
                     assert lb.shape[1] == (5 + nkpt * ndim), f"labels require {(5 + nkpt * ndim)} columns each"

@@ -1,0 +1,105 @@
+# Court Points Detection Dataset Configuration
+# This file defines the dataset structure and training parameters
+
+# Dataset paths (modify these to match your actual dataset structure)
+path: /Users/leeicheng/Documents/NCTU/MyYOLO/ultralytics/datasets/  # Root dataset directory
+train: train/images         # Training images (relative to 'path')
+val: val/images            # Validation images (relative to 'path')
+test: test/images          # Test images (optional)
+
+model: yolov8m.pt           # 用於遷移學習的基礎模型
+epochs: 10
+batch: 8
+imgsz: 640
+
+# Classes - Court Line Intersections
+# Parameters
+nc: 3 # number of classes
+names:
+  0: T-junction  # One line ends at middle of another line
+  1: Cross       # Two lines cross at their middle points  
+  2: L-corner    # Two lines meet at their endpoints
+
+# Training hyperparameters for court points detection
+hyperparameters:
+  # Learning rate settings
+  lr0: 0.01                 # Initial learning rate
+  lrf: 0.01                 # Final learning rate (lr0 * lrf)
+  momentum: 0.937           # SGD momentum
+  weight_decay: 0.0005      # Optimizer weight decay 5e-4
+  warmup_epochs: 3.0        # Warmup epochs (fractions ok)
+  warmup_momentum: 0.8      # Warmup initial momentum
+  warmup_bias_lr: 0.1       # Warmup initial bias lr
+
+  # Loss weights - Adjusted for court points detection
+  box: 7.5                  # Box regression loss gain
+  cls: 0.5                  # Classification loss gain 
+  cls_pw: 1.0              # Classification positive weights
+  obj: 1.0                 # Object confidence loss gain (scale with pixels)
+  obj_pw: 1.0              # Object positive weights
+  anchor_t: 4.0            # Anchor-multiple threshold
+  fl_gamma: 0.0            # Focal loss gamma (EfficientDet default gamma=1.5)
+
+  # Data augmentation - Optimized for court images
+  hsv_h: 0.015             # Image HSV-Hue augmentation (fraction)
+  hsv_s: 0.7               # Image HSV-Saturation augmentation (fraction)
+  hsv_v: 0.4               # Image HSV-Value augmentation (fraction)
+  degrees: 0.0             # Image rotation (+/- deg)
+  translate: 0.1           # Image translation (+/- fraction)
+  scale: 0.5               # Image scale (+/- gain)
+  shear: 0.0               # Image shear (+/- deg)
+  perspective: 0.0         # Image perspective (+/- fraction), range 0-0.001
+  flipud: 0.0              # Image flip up-down (probability)
+  fliplr: 0.5              # Image flip left-right (probability)
+  mosaic: 1.0              # Image mosaic (probability)
+  mixup: 0.0               # Image mixup (probability)
+  copy_paste: 0.0          # Segment copy-paste (probability)
+
+# Court Points specific settings
+court_points:
+  # Loss weights for different components
+  point_loss_weight: 2.0    # Weight for point regression loss
+  conf_loss_weight: 1.0     # Weight for confidence loss  
+  class_loss_weight: 1.0    # Weight for classification loss
+  
+  # Point matching settings
+  distance_threshold: 10.0  # Distance threshold for point matching (pixels)
+  
+  # Preprocessing options
+  custom_preprocess: true   # Enable court-specific preprocessing
+  use_custom_loader: true   # Use CourtPoints dataset loader
+  grayscale_conversion: false # Convert to grayscale
+  median_subtraction: true  # Apply median subtraction (TrackNet style)
+  
+  # NMS settings for point detection
+  conf_threshold: 0.5       # Confidence threshold
+  iou_threshold: 0.3        # IoU threshold (lower for point detection)
+  max_detections: 100       # Maximum detections per image
+
+# Expected dataset structure:
+#
+# data/court_points/
+# ├── train/
+# │   ├── images/           # Training images (.jpg, .png)
+# │   └── labels/           # Training labels (.txt)
+# ├── val/
+# │   ├── images/           # Validation images  
+# │   └── labels/           # Validation labels
+# └── test/                 # Optional test set
+#     ├── images/
+#     └── labels/
+#
+# Label format (YOLO format):
+# Each .txt file contains one line per annotation:
+# class_id x_center y_center width height
+# 
+# For court points, use small bounding boxes around intersection points:
+# 0 0.453 0.671 0.02 0.02  # T-junction at (45.3%, 67.1%)
+# 1 0.234 0.456 0.02 0.02  # Cross intersection 
+# 2 0.789 0.123 0.02 0.02  # L-corner
+#
+# Alternative keypoint format (if using keypoint annotations):
+# class_id x y visibility
+# 0 0.453 0.671 2          # T-junction (visibility: 0=not_visible, 1=occluded, 2=visible)
+# 1 0.234 0.456 2          # Cross intersection
+# 2 0.789 0.123 2          # L-corner
