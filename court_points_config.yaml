@@ -3,12 +3,24 @@
 
 # Dataset paths (modify these to match your actual dataset structure)
 path: /Users/leeicheng/Documents/NCTU/MyYOLO/ultralytics/datasets/  # Root dataset directory
-train: train/images         # Training images (relative to 'path')
-val: val/images            # Validation images (relative to 'path')
-test: test/images          # Test images (optional)
+train:
+  - close_v2/train/images         # Training images (relative to 'path')
+  - v3/train/images         # Training images (relative to 'path')
+  - focus_L/train/images         # Training images (relative to 'path')
+  - focus_L_2/train/images         # Training images (relative to 'path')
+val:
+  - close_v2/val/images            # Validation images (relative to 'path')
+  - v3/val/images            # Validation images (relative to 'path')
+  - focus_L/val/images            # Validation images (relative to 'path')
+  - focus_L_2/val/images            # Validation images (relative to 'path')
+test:
+  - close_v2/test/images          # Test images (optional)
+  - v3/test/images          # Test images (optional)
+  - focus_L/test/images          # Test images (optional)
+  - focus_L_2/test/images          # Test images (optional)
 
 model: yolov8m.pt           # 用於遷移學習的基礎模型
-epochs: 10
+epochs: 5
 batch: 8
 imgsz: 640
 

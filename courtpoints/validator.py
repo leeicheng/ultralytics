@@ -38,16 +38,11 @@ class CourtPointsMetrics:
         stats = np.array(self.stats) if self.stats else np.empty((0, 3))
         
         results = {}
-        if stats.shape[0] == 0:
+        if not hasattr(self, 'total_gt') or self.total_gt == 0:
             for thresh in self.distance_thresholds:
                 results[f'PA@{thresh}px'] = 0.0
             return results
 
-        # Total number of ground truth points for each class
-        # This is a simplification; a more robust way would be to count all GTs from the dataset
-        # For now, we count unique GTs that had a prediction matched to them.
-        # A proper implementation should get total GT count from the validator.
-        
         for thresh in self.distance_thresholds:
             # A true positive is a correct class match AND distance is within threshold
             correct_class_mask = stats[:, 0] == stats[:, 1]
@@ -55,14 +50,7 @@ class CourtPointsMetrics:
             
             tp = np.sum(correct_class_mask & within_dist_mask)
             
-            # Total predictions made
-            total_preds = stats.shape[0]
-            
-            # For point accuracy (recall), we need total number of ground truths.
-            # This is passed from the validator.
-            total_gt = self.total_gt
-            
-            recall = tp / (total_gt + 1e-9)
+            recall = tp / (self.total_gt + 1e-9)
             results[f'PA@{thresh}px'] = recall
             
         return results
@@ -138,21 +126,17 @@ class CourtPointsValidator(BaseValidator):
             if npr == 0:
                 continue
 
-            # Post-process and scale predictions
             predn = pred.clone()
             ops.scale_boxes(batch["img"][si].shape[1:], predn[:, :4], batch["ori_shape"][si])
             
-            # Ground truths
-            tbox = ops.xywh2xyxy(bbox)
-            labelsn = torch.cat((cls, tbox), 1)
+            gt_bboxes = ops.xywh2xyxy(bbox)
+            labelsn = torch.cat((cls, gt_bboxes), 1)
 
-            # Process for standard mAP metrics
             correct_bboxes = self._process_batch(predn, labelsn, self.iouv)
             if self.args.plots:
                 self.confusion_matrix.process_batch(predn, labelsn)
             self.stats.append((correct_bboxes, pred[:, 4], pred[:, 5], cls.squeeze(-1)))
 
-            # Process for custom court points metrics
             matched_stats = self._process_batch_for_points(predn, labelsn)
             self.court_metrics.update(matched_stats)
 
@@ -161,16 +145,14 @@ class CourtPointsValidator(BaseValidator):
         if detections.shape[0] == 0 or labels.shape[0] == 0:
             return []
 
-        gt_points = labels[:, 1:3] # Use center of GT box as the point
-        pred_points = detections[:, :2] # Use center of pred box as the point
+        gt_points = labels[:, 1:3]
+        pred_points = detections[:, :2]
 
         distances = torch.cdist(pred_points, gt_points)
         
-        # Find the closest GT for each prediction
         min_dist, gt_idx = distances.min(dim=1)
 
         matched_stats = []
-        # Only consider predictions within a reasonable distance threshold
         for i, dist in enumerate(min_dist):
             if dist < self.distance_threshold:
                 pred_cls = detections[i, 5].item()
@@ -181,23 +163,39 @@ class CourtPointsValidator(BaseValidator):
 
     def get_stats(self):
         """Get validation statistics."""
-        # Standard mAP stats
         stats = self.metrics.process(self.stats)
         self.nt = self.metrics.nt
         
-        # Custom court points stats
         self.court_metrics.set_total_gt(self.nt.sum())
         court_stats = self.court_metrics.compute()
         stats.update(court_stats)
         return stats
 
+    def get_desc(self):
+        """Get description string for court points validation."""
+        return ('%22s' + '%11s' * 5) % ('Class', 'Images', 'Instances', 'Box(P', 'R)', 'PA@10px')
+
     def print_results(self):
-        """Print validation results."""
-        super().print_results() # Print standard mAP results
+        """Print validation results, focusing on custom Point Accuracy metrics."""
+        stats = self.get_stats()
         
-        # Print custom court points results
-        LOGGER.info("\nCourt Points Specific Metrics:")
-        pf = '%22s' + '%11.3g'
-        for metric, value in self.get_stats().items():
+        p = stats.get('metrics/precision(B)', 0)
+        r = stats.get('metrics/recall(B)', 0)
+        map50 = stats.get('metrics/mAP50(B)', 0)
+        map = stats.get('metrics/mAP50-95(B)', 0)
+
+        # Print header for standard metrics
+        LOGGER.info(f"{' '*22}{'Box(P)':>11}{'R':>11}{'mAP50':>11}{'mAP50-95':>11}")
+        pf = '%22s' + '%11i' * 2 + '%11.3g' * 4
+        LOGGER.info(pf % ("all", self.seen, self.nt.sum(), p, r, map50, map))
+        LOGGER.info("Note: Standard mAP metrics are likely to be low for point detection tasks.")
+
+        # Print custom court points results in a structured table
+        LOGGER.info("\nCourt Points Specific Metrics (Point Accuracy):")
+        pa_pf = '%22s' + '%11s' + '%11.3g'
+        LOGGER.info(pa_pf % ("Metric", "Threshold", "Recall"))
+        LOGGER.info(pa_pf % ("-"*10, "-"*10, "-"*10))
+        for metric, value in stats.items():
             if 'PA@' in metric:
-                LOGGER.info(pf % (metric, value))
+                threshold = metric.split('@')[1]
+                LOGGER.info(pa_pf % ("Point Accuracy", threshold, value))
