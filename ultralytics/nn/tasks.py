@@ -530,13 +530,15 @@ class PointDetectionModel(BaseModel):
         Returns:
             (torch.Tensor): De-scaled predictions.
         """
-        p[:, :4] /= scale  # de-scale
-        x, y, wh, cls = p.split((1, 1, 2, p.shape[dim] - 4), dim)
+        p[:, :2] /= scale  # de-scale
+        points, cls = p.split((2, p.shape[dim] - 2), dim)
+        x, y = points.split(1, dim)
+
         if flips == 2:
             y = img_size[0] - y  # de-flip ud
         elif flips == 3:
             x = img_size[1] - x  # de-flip lr
-        return torch.cat((x, y, wh, cls), dim)
+        return torch.cat((x, y, cls), dim)
 
     def _clip_augmented(self, y):
         """
@@ -559,7 +561,7 @@ class PointDetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        return E2EDetectLoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
+        return v8PointDetectionLoss(self)
 
 
 
@@ -1691,16 +1693,17 @@ def guess_model_task(model):
         m = cfg["head"][-1][-2].lower()  # output module name
         if m in {"classify", "classifier", "cls", "fc"}:
             return "classify"
-        if "detect" in m:
-            return "detect"
+        # Order matters: ensure "pointdetect" maps to "point" not "detect"
+        if "point" in m:
+            return "point"
         if "segment" in m:
             return "segment"
         if m == "pose":
             return "pose"
         if m == "obb":
             return "obb"
-        if m == "point":
-            return "point"
+        if "detect" in m:
+            return "detect"
 
     # Guess from model cfg
     if isinstance(model, dict):

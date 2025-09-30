@@ -10,10 +10,14 @@ import torch.nn as nn
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models import yolo
-from ultralytics.nn.tasks import DetectionModel
+from ultralytics.nn.tasks import DetectionModel, PointDetectionModel
 from ultralytics.utils import LOGGER, RANK
-from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
+from ultralytics.utils.plotting import plot_images, plot_labels, plot_results, plot_images_with_points
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
+
+# Your dataset format needs to be:
+# <class_id> <x> <y>
+
 
 
 class PointDetectionTrainer(BaseTrainer):
@@ -137,15 +141,15 @@ class PointDetectionTrainer(BaseTrainer):
         Returns:
             (DetectionModel): YOLO detection model.
         """
-        model = DetectionModel(cfg, nc=self.data["nc"], ch=self.data["channels"], verbose=verbose and RANK == -1)
+        model = PointDetectionModel(cfg, nc=self.data["nc"], ch=self.data["channels"], verbose=verbose and RANK == -1)
         if weights:
             model.load(weights)
         return model
 
     def get_validator(self):
         """Return a DetectionValidator for YOLO model validation."""
-        self.loss_names = "box_loss", "cls_loss", "dfl_loss"
-        return yolo.detect.DetectionValidator(
+        self.loss_names = "point_loss", "cls_loss", "dfl_loss"
+        return yolo.point.PointDetectionValidator(
             self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )
 
@@ -185,13 +189,17 @@ class PointDetectionTrainer(BaseTrainer):
             batch (dict): Dictionary containing batch data.
             ni (int): Number of iterations.
         """
-        plot_images(
+        # Convert bboxes (normalized xywh) to normalized point centers (x,y)
+        bboxes = batch["bboxes"]
+        points = bboxes[:, :2]
+        plot_images_with_points(
             images=batch["img"],
             batch_idx=batch["batch_idx"],
             cls=batch["cls"].squeeze(-1),
-            bboxes=batch["bboxes"],
+            points=points,
             paths=batch["im_file"],
             fname=self.save_dir / f"train_batch{ni}.jpg",
+            names=self.data["names"],
             on_plot=self.on_plot,
         )
 

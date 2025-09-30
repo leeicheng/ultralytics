@@ -372,7 +372,10 @@ class v8PointDetectionLoss:
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
 
     def preprocess(self, targets, batch_size, scale_tensor):
-        """Preprocess targets by converting to tensor format and scaling coordinates."""
+        """Preprocess targets by converting to tensor format and scaling coordinates.
+
+        For point detection we accept standard YOLO labels (cls, x, y, w, h) and derive point targets from box centers.
+        """
         nl, ne = targets.shape
         if nl == 0:
             out = torch.zeros(batch_size, 0, ne - 1, device=self.device)
@@ -385,8 +388,12 @@ class v8PointDetectionLoss:
                 matches = i == j
                 if n := matches.sum():
                     out[j, :n] = targets[matches, 1:]
-            out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
+            # Scale bboxes to pixels for area/center computations
+            xywh = out[..., 1:5].mul_(scale_tensor)
+            centers = xywh[..., 0:2]
+            out[..., 1:3] = centers
         return out
+
 
     def point_decode(self, anchor_points, pred_dist):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
@@ -416,8 +423,9 @@ class v8PointDetectionLoss:
         # Targets
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
-        gt_labels, gt_points = targets.split((1, 2), 2)  # cls, xyxy
-        mask_gt = gt_points.sum(2, keepdim=True).gt_(0.0)
+        gt_labels = targets[..., :1]
+        gt_points = targets[..., 1:3]
+        mask_gt = (gt_points.sum(2, keepdim=True) > 0).to(torch.bool)
 
         # Pboxes
         pred_points = self.point_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)

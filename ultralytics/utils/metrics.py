@@ -659,6 +659,35 @@ def ap_per_class(
     return tp, fp, p, r, f1, ap, unique_classes.astype(int), p_curve, r_curve, f1_curve, x, prec_values
 
 
+def point_oks(gt_points, pred_points, gt_areas, sigmas):
+    """
+    Calculates Object Keypoint Similarity (OKS).
+    This is a simplified version. A full implementation would use area and sigmas.
+
+    Args:
+        gt_points (torch.Tensor): Ground truth points (M, 2).
+        pred_points (torch.Tensor): Predicted points (N, 2).
+        gt_areas (torch.Tensor): Areas of the ground truth objects (M,). Used for scaling.
+        sigmas (torch.Tensor): Per-keypoint constants that control falloff.
+
+    Returns:
+        (torch.Tensor): OKS matrix of shape (M, N).
+    """
+    # 歐氏距離的平方
+    dists = torch.cdist(gt_points, pred_points) ** 2
+
+    # OKS 的核心公式
+    # 這裡我們用一個簡化的尺度因子，實際應用中會更複雜
+    # k 是每個點類型的標準差，這裡假設所有點都一樣
+    k = sigmas.mean()  # Simplified sigma
+    scale_factor = (gt_areas.sqrt() * k * 2) ** 2
+
+    # 避免除以零
+    scale_factor = scale_factor.unsqueeze(1).expand(-1, pred_points.shape[0]) + 1e-9
+
+    oks = torch.exp(-dists / scale_factor)
+    return oks
+
 class Metric(SimpleClass):
     """
     Class for computing evaluation metrics for YOLOv8 model.
@@ -887,8 +916,8 @@ class DetMetrics(SimpleClass):
 
     @property
     def keys(self):
-        """Return a list of keys for accessing specific metrics."""
-        return ["metrics/precision(B)", "metrics/recall(B)", "metrics/mAP50(B)", "metrics/mAP50-95(B)"]
+        """Return a list of keys for accessing specific metrics (OKS-based)."""
+        return ["metrics/precision(OKS)", "metrics/recall(OKS)", "metrics/OKS50", "metrics/OKS50-95"]
 
     def mean_results(self):
         """Calculate mean of detected objects & return precision, recall, mAP50, and mAP50-95."""
@@ -983,8 +1012,8 @@ class PointDetMetrics(SimpleClass):
 
     @property
     def keys(self):
-        """Return a list of keys for accessing specific metrics."""
-        return ["metrics/precision(B)", "metrics/recall(B)", "metrics/mAP50(B)", "metrics/mAP50-95(B)"]
+        """Return a list of keys for accessing specific metrics (OKS-based)."""
+        return ["metrics/precision(OKS)", "metrics/recall(OKS)", "metrics/OKS50", "metrics/OKS50-95"]
 
     def mean_results(self):
         """Calculate mean of detected objects & return precision, recall, mAP50, and mAP50-95."""
@@ -1406,8 +1435,8 @@ class OBBMetrics(SimpleClass):
 
     @property
     def keys(self):
-        """Return a list of keys for accessing specific metrics."""
-        return ["metrics/precision(B)", "metrics/recall(B)", "metrics/mAP50(B)", "metrics/mAP50-95(B)"]
+        """Return a list of keys for accessing specific metrics (OKS-based)."""
+        return ["metrics/precision(OKS)", "metrics/recall(OKS)", "metrics/OKS50", "metrics/OKS50-95"]
 
     def mean_results(self):
         """Calculate mean of detected objects & return precision, recall, mAP50, and mAP50-95."""

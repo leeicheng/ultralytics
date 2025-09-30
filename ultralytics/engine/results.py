@@ -724,6 +724,23 @@ class Results(SimpleClass):
                 line += (conf,) * save_conf + (() if id is None else (id,))
                 texts.append(("%g " * len(line)).rstrip() % line)
 
+        elif kpts is not None:
+            # Points-only (no boxes): write class, x_center, y_center, [conf]
+            N = kpts.data.shape[0]
+            h, w = self.orig_shape
+            point_cls = getattr(self, "point_cls", None)
+            point_conf = getattr(self, "point_conf", None)
+            for j in range(N):
+                xy = kpts[j].xy[0] if hasattr(kpts[j], "xy") else kpts[j].data[0, :2]
+                x_n = float(xy[0] / w)
+                y_n = float(xy[1] / h)
+                c = int(point_cls[j].item()) if point_cls is not None else 0
+                if save_conf:
+                    confv = float(point_conf[j].item()) if point_conf is not None else (float(kpts[j].data[0, 2].item()) if kpts[j].has_visible else 1.0)
+                    texts.append(f"{c} {x_n:.6f} {y_n:.6f} {confv:.6f}")
+                else:
+                    texts.append(f"{c} {x_n:.6f} {y_n:.6f}")
+
         if texts:
             Path(txt_file).parent.mkdir(parents=True, exist_ok=True)  # make directory
             with open(txt_file, "a", encoding="utf-8") as f:
@@ -804,6 +821,19 @@ class Results(SimpleClass):
 
         is_obb = self.obb is not None
         data = self.obb if is_obb else self.boxes
+        # Points-only case (no boxes)
+        if data is None and self.keypoints is not None:
+            N = self.keypoints.data.shape[0]
+            h, w = self.orig_shape if normalize else (1, 1)
+            point_cls = getattr(self, "point_cls", None)
+            point_conf = getattr(self, "point_conf", None)
+            for i in range(N):
+                xy = self.keypoints[i].xy[0]
+                class_id = int(point_cls[i].item()) if point_cls is not None else 0
+                conf = float(point_conf[i].item()) if point_conf is not None else (float(self.keypoints[i].data[0, 2].item()) if self.keypoints[i].has_visible else 1.0)
+                result = {"name": self.names[class_id], "class": class_id, "confidence": round(conf, decimals), "point": {"x": round(float(xy[0] / w), decimals), "y": round(float(xy[1] / h), decimals)}}
+                results.append(result)
+            return results
         h, w = self.orig_shape if normalize else (1, 1)
         for i, row in enumerate(data):  # xyxy, track_id if tracking, conf, class_id
             class_id, conf = int(row.cls), round(row.conf.item(), decimals)

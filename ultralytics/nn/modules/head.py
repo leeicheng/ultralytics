@@ -199,7 +199,8 @@ class PointDetect(Detect):
     format = 'torchscript'  # Add format attribute for _inference
 
     def __init__(self, nc=80, ch=()):
-        super().__init__()
+        # Initialize base with provided channels to avoid empty "ch" errors
+        super().__init__(nc, ch)
         self.nc = nc
         self.nl = len(ch)
         self.reg_max = 16
@@ -260,8 +261,15 @@ class PointDetect(Detect):
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls bias
 
     def decode_points(self, points, anchors):
-        """Decode keypoints."""
-        return dist2point(points, anchors, dim=1)
+        """Decode points from DFL distributions and anchors."""
+        # points: (B, reg_max*2, N)
+        b, _, n = points.shape
+        reg_max = self.reg_max
+        device = points.device
+        proj = torch.arange(reg_max, dtype=points.dtype, device=device)
+        pd = points.view(b, 2, reg_max, n).permute(0, 3, 1, 2).softmax(-1).matmul(proj)
+        # pd: (B, N, 2)
+        return dist2point(pd, anchors)
 
     @staticmethod
     def postprocess(preds: torch.Tensor, max_det: int, nc: int = 80):

@@ -586,6 +586,109 @@ def plot_labels(boxes, cls, names=(), save_dir=Path(""), on_plot=None):
         on_plot(fname)
 
 
+def plot_images_with_points(
+    images: Union[torch.Tensor, np.ndarray],
+    batch_idx: Union[torch.Tensor, np.ndarray],
+    cls: Union[torch.Tensor, np.ndarray],
+    points: Union[torch.Tensor, np.ndarray] = np.zeros((0, 2), dtype=np.float32),
+    confs: Optional[Union[torch.Tensor, np.ndarray]] = None,
+    paths: Optional[List[str]] = None,
+    fname: str = "images_points.jpg",
+    names: Optional[Dict[int, str]] = None,
+    on_plot: Optional[Callable] = None,
+    max_size: int = 1920,
+    max_subplots: int = 16,
+    conf_thres: float = 0.25,
+) -> Optional[np.ndarray]:
+    """Plot image grid with class-labeled points.
+
+    Args:
+        images: (B, C, H, W) tensor or array in [0,1] or [0,255].
+        batch_idx: (N,) indices mapping each point to an image index in the batch.
+        cls: (N,) class indices for each point.
+        points: (N, 2) point coordinates, normalized [0,1] or absolute. If normalized, will be scaled to pixels.
+        confs: (N,) optional confidence per point.
+        paths: list of image paths for labeling.
+        fname: output filename.
+        names: dict of class index to name.
+        on_plot: callback after saving.
+        max_size: max output size.
+        max_subplots: limit number of images in mosaic.
+        conf_thres: min confidence threshold to draw predicted points when confs provided.
+
+    Returns:
+        np.ndarray if save is False else None.
+    """
+    if isinstance(images, torch.Tensor):
+        images = images.cpu().float().numpy()
+    if isinstance(cls, torch.Tensor):
+        cls = cls.cpu().numpy()
+    if isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()
+    if isinstance(batch_idx, torch.Tensor):
+        batch_idx = batch_idx.cpu().numpy()
+    if isinstance(confs, torch.Tensor):
+        confs = confs.cpu().numpy()
+    if images.shape[1] > 3:
+        images = images[:, :3]
+
+    bs, _, h, w = images.shape
+    bs = min(bs, max_subplots)
+    ns = np.ceil(bs ** 0.5)
+    if np.max(images[0]) <= 1:
+        images *= 255
+
+    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)
+    for i in range(bs):
+        x, y = int(w * (i // ns)), int(h * (i % ns))
+        mosaic[y:y+h, x:x+w, :] = images[i].transpose(1, 2, 0)
+
+    scale = max_size / ns / max(h, w)
+    if scale < 1:
+        h = math.ceil(scale * h)
+        w = math.ceil(scale * w)
+        mosaic = cv2.resize(mosaic, tuple(int(x * ns) for x in (w, h)))
+
+    fs = int((h + w) * ns * 0.01)
+    fs = max(fs, 18)
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    im = np.asarray(annotator.im).copy()
+    for i in range(bs):
+        x0, y0 = int(w * (i // ns)), int(h * (i % ns))
+        annotator.rectangle([x0, y0, x0 + w, y0 + h], None, (255, 255, 255), width=2)
+        if paths:
+            annotator.text([x0 + 5, y0 + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))
+        idx = batch_idx == i
+        if not np.any(idx):
+            continue
+        classes = cls[idx].astype(int)
+        pts = points[idx].astype(float)
+        conf = confs[idx] if confs is not None else None
+        if pts.shape[0]:
+            if pts.max() <= 1.1:  # normalized
+                pts[..., 0] *= w
+                pts[..., 1] *= h
+            elif scale < 1:
+                pts *= scale
+        pts[..., 0] += x0
+        pts[..., 1] += y0
+        for j, (px, py) in enumerate(pts):
+            c = classes[j]
+            name = names.get(c, c) if names else c
+            color = colors(c)
+            if conf is None or conf[j] > conf_thres:
+                cv2.circle(im, (int(px), int(py)), annotator.lw + 1, color, -1, lineType=cv2.LINE_AA)
+                label = f"{name}" if conf is None else f"{name} {conf[j]:.2f}"
+                tx = int(min(max(px + 5, x0), x0 + w - 1))
+                ty = int(min(max(py - 5, y0), y0 + h - 1))
+                cv2.putText(im, label, (tx, ty), 0, annotator.sf, (255, 255, 255), annotator.tf, cv2.LINE_AA)
+    annotator.fromarray(im)
+    annotator.im.save(fname)
+    if on_plot:
+        on_plot(fname)
+    return None
+
+
 def save_one_box(xyxy, im, file=Path("im.jpg"), gain=1.02, pad=10, square=False, BGR=False, save=True):
     """
     Save image crop as {file} with crop size multiple {gain} and {pad} pixels. Save and/or return crop.
@@ -801,6 +904,109 @@ def plot_images(
         on_plot(fname)
 
 
+def plot_images_with_points(
+    images: Union[torch.Tensor, np.ndarray],
+    batch_idx: Union[torch.Tensor, np.ndarray],
+    cls: Union[torch.Tensor, np.ndarray],
+    points: Union[torch.Tensor, np.ndarray] = np.zeros((0, 2), dtype=np.float32),
+    confs: Optional[Union[torch.Tensor, np.ndarray]] = None,
+    paths: Optional[List[str]] = None,
+    fname: str = "images_points.jpg",
+    names: Optional[Dict[int, str]] = None,
+    on_plot: Optional[Callable] = None,
+    max_size: int = 1920,
+    max_subplots: int = 16,
+    conf_thres: float = 0.25,
+) -> Optional[np.ndarray]:
+    """Plot image grid with class-labeled points.
+
+    Args:
+        images: (B, C, H, W) tensor or array in [0,1] or [0,255].
+        batch_idx: (N,) indices mapping each point to an image index in the batch.
+        cls: (N,) class indices for each point.
+        points: (N, 2) point coordinates, normalized [0,1] or absolute. If normalized, will be scaled to pixels.
+        confs: (N,) optional confidence per point.
+        paths: list of image paths for labeling.
+        fname: output filename.
+        names: dict of class index to name.
+        on_plot: callback after saving.
+        max_size: max output size.
+        max_subplots: limit number of images in mosaic.
+        conf_thres: min confidence threshold to draw predicted points when confs provided.
+
+    Returns:
+        np.ndarray if save is False else None.
+    """
+    if isinstance(images, torch.Tensor):
+        images = images.cpu().float().numpy()
+    if isinstance(cls, torch.Tensor):
+        cls = cls.cpu().numpy()
+    if isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()
+    if isinstance(batch_idx, torch.Tensor):
+        batch_idx = batch_idx.cpu().numpy()
+    if isinstance(confs, torch.Tensor):
+        confs = confs.cpu().numpy()
+    if images.shape[1] > 3:
+        images = images[:, :3]
+
+    bs, _, h, w = images.shape
+    bs = min(bs, max_subplots)
+    ns = np.ceil(bs ** 0.5)
+    if np.max(images[0]) <= 1:
+        images *= 255
+
+    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)
+    for i in range(bs):
+        x, y = int(w * (i // ns)), int(h * (i % ns))
+        mosaic[y:y+h, x:x+w, :] = images[i].transpose(1, 2, 0)
+
+    scale = max_size / ns / max(h, w)
+    if scale < 1:
+        h = math.ceil(scale * h)
+        w = math.ceil(scale * w)
+        mosaic = cv2.resize(mosaic, tuple(int(x * ns) for x in (w, h)))
+
+    fs = int((h + w) * ns * 0.01)
+    fs = max(fs, 18)
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    im = np.asarray(annotator.im).copy()
+    for i in range(bs):
+        x0, y0 = int(w * (i // ns)), int(h * (i % ns))
+        annotator.rectangle([x0, y0, x0 + w, y0 + h], None, (255, 255, 255), width=2)
+        if paths:
+            annotator.text([x0 + 5, y0 + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))
+        idx = batch_idx == i
+        if not np.any(idx):
+            continue
+        classes = cls[idx].astype(int)
+        pts = points[idx].astype(float)
+        conf = confs[idx] if confs is not None else None
+        if pts.shape[0]:
+            if pts.max() <= 1.1:  # normalized
+                pts[..., 0] *= w
+                pts[..., 1] *= h
+            elif scale < 1:
+                pts *= scale
+        pts[..., 0] += x0
+        pts[..., 1] += y0
+        for j, (px, py) in enumerate(pts):
+            c = classes[j]
+            name = names.get(c, c) if names else c
+            color = colors(c)
+            if conf is None or conf[j] > conf_thres:
+                cv2.circle(im, (int(px), int(py)), annotator.lw + 1, color, -1, lineType=cv2.LINE_AA)
+                label = f"{name}" if conf is None else f"{name} {conf[j]:.2f}"
+                tx = int(min(max(px + 5, x0), x0 + w - 1))
+                ty = int(min(max(py - 5, y0), y0 + h - 1))
+                cv2.putText(im, label, (tx, ty), 0, annotator.sf, (255, 255, 255), annotator.tf, cv2.LINE_AA)
+    annotator.fromarray(im)
+    annotator.im.save(fname)
+    if on_plot:
+        on_plot(fname)
+    return None
+
+
 @plt_settings()
 def plot_results(file="path/to/results.csv", dir="", segment=False, pose=False, classify=False, on_plot=None):
     """
@@ -859,6 +1065,109 @@ def plot_results(file="path/to/results.csv", dir="", segment=False, pose=False, 
     plt.close()
     if on_plot:
         on_plot(fname)
+
+
+def plot_images_with_points(
+    images: Union[torch.Tensor, np.ndarray],
+    batch_idx: Union[torch.Tensor, np.ndarray],
+    cls: Union[torch.Tensor, np.ndarray],
+    points: Union[torch.Tensor, np.ndarray] = np.zeros((0, 2), dtype=np.float32),
+    confs: Optional[Union[torch.Tensor, np.ndarray]] = None,
+    paths: Optional[List[str]] = None,
+    fname: str = "images_points.jpg",
+    names: Optional[Dict[int, str]] = None,
+    on_plot: Optional[Callable] = None,
+    max_size: int = 1920,
+    max_subplots: int = 16,
+    conf_thres: float = 0.25,
+) -> Optional[np.ndarray]:
+    """Plot image grid with class-labeled points.
+
+    Args:
+        images: (B, C, H, W) tensor or array in [0,1] or [0,255].
+        batch_idx: (N,) indices mapping each point to an image index in the batch.
+        cls: (N,) class indices for each point.
+        points: (N, 2) point coordinates, normalized [0,1] or absolute. If normalized, will be scaled to pixels.
+        confs: (N,) optional confidence per point.
+        paths: list of image paths for labeling.
+        fname: output filename.
+        names: dict of class index to name.
+        on_plot: callback after saving.
+        max_size: max output size.
+        max_subplots: limit number of images in mosaic.
+        conf_thres: min confidence threshold to draw predicted points when confs provided.
+
+    Returns:
+        np.ndarray if save is False else None.
+    """
+    if isinstance(images, torch.Tensor):
+        images = images.cpu().float().numpy()
+    if isinstance(cls, torch.Tensor):
+        cls = cls.cpu().numpy()
+    if isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()
+    if isinstance(batch_idx, torch.Tensor):
+        batch_idx = batch_idx.cpu().numpy()
+    if isinstance(confs, torch.Tensor):
+        confs = confs.cpu().numpy()
+    if images.shape[1] > 3:
+        images = images[:, :3]
+
+    bs, _, h, w = images.shape
+    bs = min(bs, max_subplots)
+    ns = np.ceil(bs ** 0.5)
+    if np.max(images[0]) <= 1:
+        images *= 255
+
+    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)
+    for i in range(bs):
+        x, y = int(w * (i // ns)), int(h * (i % ns))
+        mosaic[y:y+h, x:x+w, :] = images[i].transpose(1, 2, 0)
+
+    scale = max_size / ns / max(h, w)
+    if scale < 1:
+        h = math.ceil(scale * h)
+        w = math.ceil(scale * w)
+        mosaic = cv2.resize(mosaic, tuple(int(x * ns) for x in (w, h)))
+
+    fs = int((h + w) * ns * 0.01)
+    fs = max(fs, 18)
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    im = np.asarray(annotator.im).copy()
+    for i in range(bs):
+        x0, y0 = int(w * (i // ns)), int(h * (i % ns))
+        annotator.rectangle([x0, y0, x0 + w, y0 + h], None, (255, 255, 255), width=2)
+        if paths:
+            annotator.text([x0 + 5, y0 + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))
+        idx = batch_idx == i
+        if not np.any(idx):
+            continue
+        classes = cls[idx].astype(int)
+        pts = points[idx].astype(float)
+        conf = confs[idx] if confs is not None else None
+        if pts.shape[0]:
+            if pts.max() <= 1.1:  # normalized
+                pts[..., 0] *= w
+                pts[..., 1] *= h
+            elif scale < 1:
+                pts *= scale
+        pts[..., 0] += x0
+        pts[..., 1] += y0
+        for j, (px, py) in enumerate(pts):
+            c = classes[j]
+            name = names.get(c, c) if names else c
+            color = colors(c)
+            if conf is None or conf[j] > conf_thres:
+                cv2.circle(im, (int(px), int(py)), annotator.lw + 1, color, -1, lineType=cv2.LINE_AA)
+                label = f"{name}" if conf is None else f"{name} {conf[j]:.2f}"
+                tx = int(min(max(px + 5, x0), x0 + w - 1))
+                ty = int(min(max(py - 5, y0), y0 + h - 1))
+                cv2.putText(im, label, (tx, ty), 0, annotator.sf, (255, 255, 255), annotator.tf, cv2.LINE_AA)
+    annotator.fromarray(im)
+    annotator.im.save(fname)
+    if on_plot:
+        on_plot(fname)
+    return None
 
 
 def plt_color_scatter(v, f, bins=20, cmap="viridis", alpha=0.8, edgecolors="none"):
