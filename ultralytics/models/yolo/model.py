@@ -14,6 +14,7 @@ from ultralytics.nn.tasks import (
     WorldModel,
     YOLOEModel,
     YOLOESegModel,
+    PointDetectionModel,
 )
 from ultralytics.utils import ROOT, yaml_load
 
@@ -86,6 +87,12 @@ class YOLO(Model):
                 "trainer": yolo.obb.OBBTrainer,
                 "validator": yolo.obb.OBBValidator,
                 "predictor": yolo.obb.OBBPredictor,
+            },
+            "point": {
+                "model": PointDetectionModel,
+                "trainer": yolo.point.PointDetectionTrainer,
+                "validator": yolo.point.PointDetectionValidator,
+                "predictor": yolo.point.PointDetectionPredictor,
             },
         }
 

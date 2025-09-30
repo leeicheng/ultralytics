@@ -928,6 +928,102 @@ class DetMetrics(SimpleClass):
         """Return dictionary of computed performance metrics and statistics."""
         return self.box.curves_results
 
+class PointDetMetrics(SimpleClass):
+    """
+    Utility class for computing detection metrics such as precision, recall, and mean average precision (mAP).
+
+    Attributes:
+        save_dir (Path): A path to the directory where the output plots will be saved.
+        plot (bool): A flag that indicates whether to plot precision-recall curves for each class.
+        names (dict): A dictionary of class names.
+        box (Metric): An instance of the Metric class for storing detection results.
+        speed (dict): A dictionary for storing execution times of different parts of the detection process.
+        task (str): The task type, set to 'detect'.
+    """
+
+    def __init__(self, save_dir=Path("."), plot=False, names={}) -> None:
+        """
+        Initialize a DetMetrics instance with a save directory, plot flag, and class names.
+
+        Args:
+            save_dir (Path, optional): Directory to save plots.
+            plot (bool, optional): Whether to plot precision-recall curves.
+            names (dict, optional): Dictionary mapping class indices to names.
+        """
+        self.save_dir = save_dir
+        self.plot = plot
+        self.names = names
+        self.box = Metric()
+        self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
+        self.task = "detect"
+
+    def process(self, tp, conf, pred_cls, target_cls, on_plot=None):
+        """
+        Process predicted results for object detection and update metrics.
+
+        Args:
+            tp (np.ndarray): True positive array.
+            conf (np.ndarray): Confidence array.
+            pred_cls (np.ndarray): Predicted class indices array.
+            target_cls (np.ndarray): Target class indices array.
+            on_plot (callable, optional): Function to call after plots are generated.
+        """
+        results = ap_per_class(
+            tp,
+            conf,
+            pred_cls,
+            target_cls,
+            plot=self.plot,
+            save_dir=self.save_dir,
+            names=self.names,
+            on_plot=on_plot,
+        )[2:]
+        self.box.nc = len(self.names)
+        self.box.update(results)
+
+    @property
+    def keys(self):
+        """Return a list of keys for accessing specific metrics."""
+        return ["metrics/precision(B)", "metrics/recall(B)", "metrics/mAP50(B)", "metrics/mAP50-95(B)"]
+
+    def mean_results(self):
+        """Calculate mean of detected objects & return precision, recall, mAP50, and mAP50-95."""
+        return self.box.mean_results()
+
+    def class_result(self, i):
+        """Return the result of evaluating the performance of an object detection model on a specific class."""
+        return self.box.class_result(i)
+
+    @property
+    def maps(self):
+        """Return mean Average Precision (mAP) scores per class."""
+        return self.box.maps
+
+    @property
+    def fitness(self):
+        """Return the fitness of box object."""
+        return self.box.fitness()
+
+    @property
+    def ap_class_index(self):
+        """Return the average precision index per class."""
+        return self.box.ap_class_index
+
+    @property
+    def results_dict(self):
+        """Return dictionary of computed performance metrics and statistics."""
+        return dict(zip(self.keys + ["fitness"], self.mean_results() + [self.fitness]))
+
+    @property
+    def curves(self):
+        """Return a list of curves for accessing specific metrics curves."""
+        return ["Precision-Recall(B)", "F1-Confidence(B)", "Precision-Confidence(B)", "Recall-Confidence(B)"]
+
+    @property
+    def curves_results(self):
+        """Return dictionary of computed performance metrics and statistics."""
+        return self.box.curves_results
+
 
 class SegmentMetrics(SimpleClass):
     """
