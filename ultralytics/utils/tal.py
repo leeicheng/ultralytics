@@ -10,6 +10,110 @@ from .ops import xywhr2xyxyxyxy
 
 TORCH_1_10 = check_version(torch.__version__, "1.10.0")
 
+import torch
+import torch.nn.functional as F
+
+class PointAssigner:
+    """
+    An assigner for keypoint detection tasks. It assigns the top-k best
+    predicted points to each ground-truth point based on a cost function
+    that includes classification score and Euclidean distance.
+    """
+
+    def __init__(self, topk=10, num_classes=3):
+        self.topk = topk
+        self.num_classes = num_classes
+
+    @torch.no_grad()
+    def __call__(self,
+                 pred_scores,
+                 pred_points,
+                 anchor_points,  # 未使用，但保留以符合介面
+                 gt_labels,
+                 gt_points,
+                 mask_gt):
+        """
+        Args:
+            pred_scores (Tensor): Predicted scores, shape (B, N, num_classes)
+            pred_points (Tensor): Predicted points, shape (B, N, 2)
+            gt_labels (Tensor): Ground truth labels, shape (B, M, 1)
+            gt_points (Tensor): Ground truth points, shape (B, M, 2)
+            mask_gt (Tensor): Mask for valid ground truths, shape (B, M, 1)
+
+        Returns:
+            (Tuple): A tuple containing:
+                - target_labels (Tensor)
+                - target_points (Tensor)
+                - target_scores (Tensor)
+                - fg_mask (Tensor)
+                - target_gt_idx (Tensor)
+        """
+        # 1. 準備工作
+        bs, num_preds, _ = pred_points.shape
+        device = pred_points.device
+
+        # 最終輸出的張量
+        target_labels = torch.zeros(bs, num_preds, dtype=torch.long, device=device)
+        target_points = torch.zeros(bs, num_preds, 2, device=device)
+        target_scores = torch.zeros(bs, num_preds, self.num_classes, device=device)
+        fg_mask = torch.zeros(bs, num_preds, dtype=torch.bool, device=device)
+
+        # 逐張圖片進行處理
+        for b in range(bs):
+            # 取得單張圖片的預測和標籤
+            pred_scores_b = pred_scores[b]  # (N, C)
+            pred_points_b = pred_points[b]  # (N, 2)
+
+            gt_labels_b = gt_labels[b]  # (M, 1)
+            gt_points_b = gt_points[b]  # (M, 2)
+            mask_gt_b = mask_gt[b]  # (M, 1)
+
+            num_gt = mask_gt_b.sum()
+            if num_gt == 0:
+                continue
+
+            # 過濾掉無效的 gt
+            gt_labels_b = gt_labels_b[mask_gt_b.squeeze()]
+            gt_points_b = gt_points_b[mask_gt_b.squeeze()]
+
+            # 2. 計算成本矩陣 (Cost Matrix)
+            # 2.1 分類成本 (Classification Cost)
+            # BCE loss cost: C = -log(p) -> 這裡用 1-p 作為簡化
+            cls_cost = F.one_hot(gt_labels_b.long(), self.num_classes).float()
+            cls_cost = 1 - pred_scores_b.unsqueeze(0) * cls_cost.unsqueeze(1)
+            # 取出對應 gt 類別的 cost
+            cost_c = torch.gather(cls_cost, 2, gt_labels_b.reshape(num_gt, 1, 1).repeat(1, num_preds, 1)).squeeze(-1)
+
+            # 2.2 距離成本 (Distance Cost)
+            # 計算所有 gt_points 和 pred_points 之間的 L2 距離
+            cost_d = torch.cdist(gt_points_b, pred_points_b, p=2)
+
+            # 2.3 總成本 (Total Cost)
+            cost_matrix = cost_c * cost_d
+
+            # 3. 為每個 GT 選擇 Top-K 最佳匹配
+            _, topk_indices = torch.topk(cost_matrix, k=self.topk, dim=1, largest=False)
+
+            # 4. 建立輸出張量
+            # topk_indices 的維度是 (num_gt, topk)
+            # 我們需要將這些匹配結果填入最終的輸出張量中
+
+            # 將 topk_indices 攤平成一維
+            matched_pred_indices = topk_indices.reshape(-1)
+
+            # 建立對應的 gt 索引
+            matched_gt_indices = torch.arange(num_gt, device=device).unsqueeze(1).repeat(1, self.topk).reshape(-1)
+
+            # 標記正樣本 (Foreground Mask)
+            fg_mask[b][matched_pred_indices] = True
+
+            # 分配目標
+            target_labels[b][matched_pred_indices] = gt_labels_b[matched_gt_indices]
+            target_points[b][matched_pred_indices] = gt_points_b[matched_gt_indices]
+            target_scores[b][matched_pred_indices] = F.one_hot(gt_labels_b[matched_gt_indices].long(),
+                                                               self.num_classes).float()
+
+        return target_labels, target_points, target_scores, fg_mask, None
 
 class TaskAlignedAssigner(nn.Module):
     """
@@ -387,6 +491,21 @@ def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
         return torch.cat((c_xy, wh), dim)  # xywh bbox
     return torch.cat((x1y1, x2y2), dim)  # xyxy bbox
 
+def dist2point(distance, anchor_points):
+    """
+        將 DFL 解碼後的偏移量 (dx, dy) 轉換為絕對座標的點 (px, py).
+
+        Args:
+            pred_offsets (torch.Tensor): 預測的偏移量，來自 DFL 解碼後的結果。
+                                         Shape: (batch_size, num_anchors, 2)，分別代表 (dx, dy)。
+            anchor_points (torch.Tensor): 特徵圖上的基準點 (anchor) 座標。
+                                          Shape: (num_anchors, 2)，分別代表 (ax, ay)。
+
+        Returns:
+            (torch.Tensor): 最終預測的關鍵點絕對座標。
+                            Shape: (batch_size, num_anchors, 2)，分別代表 (px, py)。
+        """
+    return distance + anchor_points
 
 def bbox2dist(anchor_points, bbox, reg_max):
     """Transform bbox(xyxy) to dist(ltrb)."""

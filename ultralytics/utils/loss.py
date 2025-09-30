@@ -6,7 +6,8 @@ import torch.nn.functional as F
 
 from ultralytics.utils.metrics import OKS_SIGMA
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
-from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
+from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors, \
+    dist2point, PointAssigner
 from ultralytics.utils.torch_utils import autocast
 
 from .metrics import bbox_iou, probiou
@@ -106,6 +107,98 @@ class BboxLoss(nn.Module):
             loss_dfl = torch.tensor(0.0).to(pred_dist.device)
 
         return loss_iou, loss_dfl
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class PointDFLoss(nn.Module):
+    """
+    DFL (Distribution Focal Loss) for keypoint regression.
+    This class calculates the DFL for x and y coordinates independently
+    and sums them up. It does not include any IoU-related loss.
+    """
+
+    def __init__(self, reg_max=16):
+        super().__init__()
+        self.reg_max = reg_max
+
+    def forward(self,
+                pred_dist,
+                target_points,
+                anchor_points,
+                target_scores,  # From assigner, used as weights
+                target_scores_sum,
+                fg_mask):
+        """
+        Args:
+            pred_dist (Tensor): Predicted distributions for offsets, shape (B, N, reg_max * 2).
+            target_points (Tensor): Ground truth points, shape (B, N, 2).
+            anchor_points (Tensor): Anchor points, shape (N, 2).
+            target_scores (Tensor): Target classification scores, used as weights for the loss.
+            target_scores_sum (float): Sum of target scores for normalization.
+            fg_mask (Tensor): Foreground mask, shape (B, N).
+
+        Returns:
+            (Tensor): The calculated DFL loss.
+        """
+        # 1. 篩選出正樣本 (predictions assigned to a ground truth)
+        if fg_mask.sum() == 0:
+            return torch.tensor(0.0, device=pred_dist.device)
+
+        # 取得所有圖片在 batch 維度上的 anchor points
+        batch_size = pred_dist.shape[0]
+        anchor_points_batch = anchor_points.repeat(batch_size, 1, 1)
+
+        # 根據 fg_mask 篩選
+        pred_dist_pos = pred_dist[fg_mask]  # (num_pos, reg_max * 2)
+        target_points_pos = target_points[fg_mask]  # (num_pos, 2)
+        anchor_points_pos = anchor_points_batch[fg_mask]  # (num_pos, 2)
+        weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)  # (num_pos, 1)
+
+        # 2. 計算目標偏移量 (Target Offsets)
+        # 模型學習的是 anchor 到 target 的偏移量
+        target_offsets = target_points_pos - anchor_points_pos
+
+        # 3. 準備 DFL 的目標 (Target for DFL)
+        tl = target_offsets.floor()  # 左邊的整數
+        tr = tl + 1  # 右邊的整數
+        wl = tr - target_offsets  # 左邊的權重
+        wr = target_offsets - tl  # 右邊的權重
+
+        # 將左右邊界限制在 [0, reg_max-1] 範圍內
+        tl.clamp_(0, self.reg_max - 1)
+        tr.clamp_(0, self.reg_max - 1)
+
+        # 4. 計算 Loss
+        # 將預測分佈 reshape 成 (num_pos, 2, reg_max)
+        pred_dist_pos = pred_dist_pos.view(-1, 2, self.reg_max)
+
+        # 分別計算 x 和 y 的 loss
+        loss_x = self.calculate_dfl(pred_dist_pos[:, 0, :], tl[:, 0], tr[:, 0], wl[:, 0], wr[:, 0], weight.squeeze(-1))
+        loss_y = self.calculate_dfl(pred_dist_pos[:, 1, :], tl[:, 1], tr[:, 1], wl[:, 1], wr[:, 1], weight.squeeze(-1))
+
+        # 5. 正規化並回傳
+        # 將 x 和 y 的 loss 相加，並除以總權重
+        return (loss_x + loss_y) / target_scores_sum
+
+    def calculate_dfl(self, pred_dist, tl, tr, wl, wr, weight):
+        """Helper function to compute DFL for a single dimension (x or y)."""
+        # 建立 DFL 的目標張量
+        target_dist = torch.zeros(pred_dist.shape, dtype=pred_dist.dtype, device=pred_dist.device)
+
+        # 根據左右整數和權重，填充目標分佈
+        # .long() is necessary for scatter_
+        target_dist.scatter_(1, tl.unsqueeze(1).long(), wl.unsqueeze(1))
+        target_dist.scatter_(1, tr.unsqueeze(1).long(), wr.unsqueeze(1))
+
+        # 使用 BCEWithLogitsLoss 計算預測分佈和目標分佈之間的損失
+        loss = F.binary_cross_entropy_with_logits(pred_dist, target_dist, reduction='none')
+
+        # 加權並加總
+        return (loss.sum(1) * weight).sum()
 
 
 class RotatedBboxLoss(BboxLoss):
@@ -267,14 +360,15 @@ class v8PointDetectionLoss:
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
-        self.no = m.nc + m.reg_max * 4
+        # m.reg_max * 2 代表預測點的 x 和 y 兩個座標的機率分佈
+        self.no = m.nc + m.reg_max * 2
         self.reg_max = m.reg_max
         self.device = device
 
         self.use_dfl = m.reg_max > 1
 
-        self.assigner = TaskAlignedAssigner(topk=tal_topk, num_classes=self.nc, alpha=0.5, beta=6.0)
-        self.bbox_loss = BboxLoss(m.reg_max).to(device)
+        self.assigner = PointAssigner(topk=tal_topk, num_classes=self.nc)
+        self.point_loss = PointDFLoss(m.reg_max).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
 
     def preprocess(self, targets, batch_size, scale_tensor):
@@ -294,21 +388,21 @@ class v8PointDetectionLoss:
             out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
         return out
 
-    def bbox_decode(self, anchor_points, pred_dist):
+    def point_decode(self, anchor_points, pred_dist):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
         if self.use_dfl:
             b, a, c = pred_dist.shape  # batch, anchors, channels
-            pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
+            pred_dist = pred_dist.view(b, a, 2, c // 2).softmax(3).matmul(self.proj.type(pred_dist.dtype))
             # pred_dist = pred_dist.view(b, a, c // 4, 4).transpose(2,3).softmax(3).matmul(self.proj.type(pred_dist.dtype))
             # pred_dist = (pred_dist.view(b, a, c // 4, 4).softmax(2) * self.proj.type(pred_dist.dtype).view(1, 1, -1, 1)).sum(2)
-        return dist2bbox(pred_dist, anchor_points, xywh=False)
+        return dist2point(pred_dist, anchor_points)
 
     def __call__(self, preds, batch):
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc), 1
+            (self.reg_max * 2, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
@@ -322,21 +416,21 @@ class v8PointDetectionLoss:
         # Targets
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
-        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
-        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0.0)
+        gt_labels, gt_points = targets.split((1, 2), 2)  # cls, xyxy
+        mask_gt = gt_points.sum(2, keepdim=True).gt_(0.0)
 
         # Pboxes
-        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+        pred_points = self.point_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
         # dfl_conf = pred_distri.view(batch_size, -1, 4, self.reg_max).detach().softmax(-1)
         # dfl_conf = (dfl_conf.amax(-1).mean(-1) + dfl_conf.amax(-1).amin(-1)) / 2
 
-        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
+        _, target_points, target_scores, fg_mask, _ = self.assigner(
             # pred_scores.detach().sigmoid() * 0.8 + dfl_conf.unsqueeze(-1) * 0.2,
             pred_scores.detach().sigmoid(),
-            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            (pred_points.detach() * stride_tensor).type(gt_points.dtype),
             anchor_points * stride_tensor,
             gt_labels,
-            gt_bboxes,
+            gt_points,
             mask_gt,
         )
 
@@ -348,9 +442,11 @@ class v8PointDetectionLoss:
 
         # Bbox loss
         if fg_mask.sum():
-            target_bboxes /= stride_tensor
-            loss[0], loss[2] = self.bbox_loss(
-                pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
+            target_points /= stride_tensor
+            loss[0] = torch.tensor(0.0, device=self.device)
+
+            loss[2] = self.point_loss(
+                pred_distri, pred_points, anchor_points, target_points, target_scores, target_scores_sum, fg_mask
             )
 
         loss[0] *= self.hyp.box  # box gain
