@@ -73,16 +73,17 @@ class PointAssigner:
                 continue
 
             # 過濾掉無效的 gt
-            gt_labels_b = gt_labels_b[mask_gt_b.squeeze()]
+            gt_labels_b = gt_labels_b[mask_gt_b.squeeze()].long()
             gt_points_b = gt_points_b[mask_gt_b.squeeze()]
 
             # 2. 計算成本矩陣 (Cost Matrix)
             # 2.1 分類成本 (Classification Cost)
             # BCE loss cost: C = -log(p) -> 這裡用 1-p 作為簡化
-            cls_cost = F.one_hot(gt_labels_b.long(), self.num_classes).float()
-            cls_cost = 1 - pred_scores_b.unsqueeze(0) * cls_cost.unsqueeze(1)
-            # 取出對應 gt 類別的 cost
-            cost_c = torch.gather(cls_cost, 2, gt_labels_b.reshape(num_gt, 1, 1).repeat(1, num_preds, 1)).squeeze(-1)
+            labels = gt_labels_b.squeeze(-1).long()  # (G,)
+            one_hot = F.one_hot(labels, self.num_classes).float()  # (G, C)
+            pred_scores_expand = pred_scores_b.unsqueeze(0).expand(num_gt, -1, -1)  # (G, N, C)
+            pred_for_gt = (pred_scores_expand * one_hot.unsqueeze(1)).sum(-1)  # (G, N)
+            cost_c = 1 - pred_for_gt
 
             # 2.2 距離成本 (Distance Cost)
             # 計算所有 gt_points 和 pred_points 之間的 L2 距離
@@ -108,10 +109,11 @@ class PointAssigner:
             fg_mask[b][matched_pred_indices] = True
 
             # 分配目標
-            target_labels[b][matched_pred_indices] = gt_labels_b[matched_gt_indices]
+            target_labels[b][matched_pred_indices] = gt_labels_b[matched_gt_indices].squeeze(-1)
             target_points[b][matched_pred_indices] = gt_points_b[matched_gt_indices]
-            target_scores[b][matched_pred_indices] = F.one_hot(gt_labels_b[matched_gt_indices].long(),
-                                                               self.num_classes).float()
+            target_scores[b][matched_pred_indices] = F.one_hot(
+                gt_labels_b[matched_gt_indices].squeeze(-1).long(), self.num_classes
+            ).float()
 
         return target_labels, target_points, target_scores, fg_mask, None
 

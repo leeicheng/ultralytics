@@ -454,7 +454,7 @@ class v8PointDetectionLoss:
             loss[0] = torch.tensor(0.0, device=self.device)
 
             loss[2] = self.point_loss(
-                pred_distri, pred_points, anchor_points, target_points, target_scores, target_scores_sum, fg_mask
+                pred_distri, target_points, anchor_points, target_scores, target_scores_sum, fg_mask
             )
 
         loss[0] *= self.hyp.box  # box gain

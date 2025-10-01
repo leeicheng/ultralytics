@@ -2,7 +2,7 @@
 import torch
 
 from ultralytics.engine.validator import BaseValidator
-from ultralytics.utils import ops
+from ultralytics.utils import LOGGER, ops
 from ultralytics.utils.metrics import PointDetMetrics, point_oks
 from ultralytics.utils.plotting import plot_images_with_points
 
@@ -24,9 +24,16 @@ class PointDetectionValidator(BaseValidator):
         return batch
 
     def init_metrics(self, model):
-        super().init_metrics(model)
+        # Initialize evaluation metrics for point validation
+        # Set names and class count explicitly (BaseValidator.init_metrics is a no-op)
+        self.names = getattr(model, 'names', {})
+        self.nc = len(self.names)
+        self.metrics.names = self.names
+        self.metrics.plot = self.args.plots
+        self.seen = 0
+        self.stats = dict(tp=[], conf=[], pred_cls=[], target_cls=[], target_img=[])
+        # Sigmas for OKS (constant per class by default)
         self.sigmas = torch.ones(self.nc, device=self.device) * 0.072
-
     def get_desc(self):
         # Display as OKS metrics columns
         return ("%22s" + "%11s" * 6) % ("Class", "Images", "Instances", "OKS(P", "R", "OKS50", "OKS50-95)")
@@ -66,6 +73,20 @@ class PointDetectionValidator(BaseValidator):
         return output
 
     def postprocess(self, preds):
+        # Debug logging for preds structure
+        try:
+            if isinstance(preds, (list, tuple)):
+                LOGGER.info(f"[PointValidator] postprocess received {type(preds).__name__} of len={len(preds)}")
+                for i, p in enumerate(preds):
+                    shape = tuple(p.shape) if hasattr(p, "shape") else None
+                    LOGGER.info(f"  preds[{i}]: type={type(p).__name__}, shape={shape}")
+                preds = preds[0]
+            else:
+                shape = tuple(preds.shape) if hasattr(preds, "shape") else None
+                LOGGER.info(f"[PointValidator] postprocess received tensor shape={shape}")
+        except Exception as e:
+            LOGGER.warning(f"[PointValidator] postprocess debug log failed: {e}")
+
         radius = getattr(self.args, "radius", 10.0)
         return self.point_non_max_suppression(
             preds, conf_thres=self.args.conf, radius=radius, max_det=self.args.max_det

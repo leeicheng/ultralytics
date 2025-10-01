@@ -651,11 +651,11 @@ def plot_images_with_points(
 
     fs = int((h + w) * ns * 0.01)
     fs = max(fs, 18)
-    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=False, example=str(names))
     im = np.asarray(annotator.im).copy()
     for i in range(bs):
         x0, y0 = int(w * (i // ns)), int(h * (i % ns))
-        annotator.rectangle([x0, y0, x0 + w, y0 + h], None, (255, 255, 255), width=2)
+        cv2.rectangle(im, (x0, y0), (x0 + w, y0 + h), (255, 255, 255), 2)
         if paths:
             annotator.text([x0 + 5, y0 + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))
         idx = batch_idx == i
@@ -815,7 +815,7 @@ def plot_images(
     # Annotate
     fs = int((h + w) * ns * 0.01)  # font size
     fs = max(fs, 18)  # ensure that the font size is large enough to be easily readable.
-    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=False, example=str(names))
     for i in range(bs):
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
         annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
@@ -969,11 +969,11 @@ def plot_images_with_points(
 
     fs = int((h + w) * ns * 0.01)
     fs = max(fs, 18)
-    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=False, example=str(names))
     im = np.asarray(annotator.im).copy()
     for i in range(bs):
         x0, y0 = int(w * (i // ns)), int(h * (i % ns))
-        annotator.rectangle([x0, y0, x0 + w, y0 + h], None, (255, 255, 255), width=2)
+        cv2.rectangle(im, (x0, y0), (x0 + w, y0 + h), (255, 255, 255), 2)
         if paths:
             annotator.text([x0 + 5, y0 + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))
         idx = batch_idx == i
@@ -1049,6 +1049,8 @@ def plot_results(file="path/to/results.csv", dir="", segment=False, pose=False, 
             data = pd.read_csv(f)
             s = [x.strip() for x in data.columns]
             x = data.values[:, 0]
+            # Guard: limit indices to available columns to avoid out-of-bounds
+            index = [j for j in index if j < data.values.shape[1]]
             for i, j in enumerate(index):
                 y = data.values[:, j].astype("float")
                 # y[y == 0] = np.nan  # don't show zero values
@@ -1132,11 +1134,11 @@ def plot_images_with_points(
 
     fs = int((h + w) * ns * 0.01)
     fs = max(fs, 18)
-    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=str(names))
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=False, example=str(names))
     im = np.asarray(annotator.im).copy()
     for i in range(bs):
         x0, y0 = int(w * (i // ns)), int(h * (i % ns))
-        annotator.rectangle([x0, y0, x0 + w, y0 + h], None, (255, 255, 255), width=2)
+        cv2.rectangle(im, (x0, y0), (x0 + w, y0 + h), (255, 255, 255), 2)
         if paths:
             annotator.text([x0 + 5, y0 + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))
         idx = batch_idx == i

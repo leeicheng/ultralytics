@@ -226,8 +226,9 @@ class PointDetect(Detect):
         if self.training:
             return x
 
-        # In inference mode, call the specialized _inference method
-        return self._inference(x)
+        # In inference mode, call the specialized _inference method and return (y, x) for validator/loss
+        y = self._inference(x)
+        return y if self.export else (y, x)
 
     def _inference(self, x):
         """Decode predicted points and class probabilities for inference and export."""
@@ -243,15 +244,17 @@ class PointDetect(Detect):
         if self.export and self.format in {"tflite", "edgetpu"}:
             grid_h, grid_w = shape[2:]
             grid_size = torch.tensor([grid_w, grid_h], device=point.device, dtype=point.dtype).reshape(1, 2, 1)
-            norm = self.strides / (self.stride[0] * grid_size)
-            dpoint = self.decode_points(self.dfl(point) * norm, self.anchors.unsqueeze(0) * norm)
+            # Decode to (B, A, 2); scale by strides later if needed in exporters
+            dpoint = self.decode_points(point, self.anchors)
         elif self.export and self.format == "imx":
-            dpoint = self.decode_points(self.dfl(point) * self.strides, self.anchors.unsqueeze(0) * self.strides)
-            return dpoint.transpose(1, 2), cls.sigmoid().permute(0, 2, 1)
+            dpoint = self.decode_points(point, self.anchors)
+            return dpoint, cls.sigmoid().permute(0, 2, 1)
         else:
-            dpoint = self.decode_points(self.dfl(point), self.anchors.unsqueeze(0)) * self.strides
-
-        return torch.cat((dpoint, cls.sigmoid()), 1)
+            # Non-export path: decode (B, A, 2) and scale to pixels
+            dpoint = self.decode_points(point, self.anchors) * self.strides.unsqueeze(-1)
+            pcls = cls.sigmoid().permute(0, 2, 1)  # (B, A, nc)
+            y = torch.cat((dpoint, pcls), dim=2)  # (B, A, 2+nc)
+            return y
 
     def bias_init(self):
         """Initialize Detect() biases."""
@@ -269,6 +272,15 @@ class PointDetect(Detect):
         proj = torch.arange(reg_max, dtype=points.dtype, device=device)
         pd = points.view(b, 2, reg_max, n).permute(0, 3, 1, 2).softmax(-1).matmul(proj)
         # pd: (B, N, 2)
+        # Robustify anchors shape to (N, 2)
+        if anchors.dim() == 2:
+            if anchors.shape[0] == 2 and anchors.shape[1] == n:
+                anchors = anchors.transpose(0, 1)
+        elif anchors.dim() == 3:
+            if anchors.shape[0] == 1 and anchors.shape[1] == 2 and anchors.shape[2] == n:
+                anchors = anchors.transpose(1, 2).squeeze(0)
+            elif anchors.shape[0] == 1 and anchors.shape[1] == n and anchors.shape[2] == 2:
+                anchors = anchors.squeeze(0)
         return dist2point(pd, anchors)
 
     @staticmethod
