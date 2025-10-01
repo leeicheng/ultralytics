@@ -176,8 +176,11 @@ def verify_image(args):
 
 
 def verify_image_label(args):
-    """Verify one image-label pair."""
-    im_file, lb_file, prefix, keypoint, num_cls, nkpt, ndim, single_cls = args
+    """Verify one image-label pair.
+
+    Supports standard YOLO box labels and point-only labels when `point` flag is True.
+    """
+    im_file, lb_file, prefix, keypoint, point, num_cls, nkpt, ndim, single_cls = args
     # Number (missing, found, empty, corrupt), message, segments, keypoints
     nm, nf, ne, nc, msg, segments, keypoints = 0, 0, 0, 0, "", [], None
     try:
@@ -209,6 +212,18 @@ def verify_image_label(args):
                 if keypoint:
                     assert lb.shape[1] == (5 + nkpt * ndim), f"labels require {(5 + nkpt * ndim)} columns each"
                     points = lb[:, 5:].reshape(-1, ndim)[:, :2]
+                elif point:
+                    # Accept point-only labels in formats: cls x y [conf]
+                    assert lb.shape[1] >= 3, f"point labels require at least 3 columns, {lb.shape[1]} detected"
+                    # Normalize to 5 columns by padding width/height with zeros, and trimming extras if any
+                    if lb.shape[1] == 3:
+                        lb = np.concatenate([lb, np.zeros((lb.shape[0], 2), dtype=lb.dtype)], axis=1)
+                    elif lb.shape[1] > 5:
+                        lb = lb[:, :5]
+                    elif lb.shape[1] == 4:
+                        # If a confidence column exists, drop it and pad to 5
+                        lb = np.concatenate([lb[:, :3], np.zeros((lb.shape[0], 2), dtype=lb.dtype)], axis=1)
+                    points = lb[:, 1:3]
                 else:
                     assert lb.shape[1] == 5, f"labels require 5 columns, {lb.shape[1]} columns detected"
                     points = lb[:, 1:]
@@ -234,7 +249,8 @@ def verify_image_label(args):
                 lb = np.zeros((0, (5 + nkpt * ndim) if keypoint else 5), dtype=np.float32)
         else:
             nm = 1  # label missing
-            lb = np.zeros((0, (5 + nkpt * ndim) if keypoints else 5), dtype=np.float32)
+            base_cols = (5 + nkpt * ndim) if keypoint else 5
+            lb = np.zeros((0, base_cols), dtype=np.float32)
         if keypoint:
             keypoints = lb[:, 5:].reshape(-1, nkpt, ndim)
             if ndim == 2:
