@@ -215,14 +215,22 @@ def verify_image_label(args):
                 elif point:
                     # Accept point-only labels in formats: cls x y [conf]
                     assert lb.shape[1] >= 3, f"point labels require at least 3 columns, {lb.shape[1]} detected"
-                    # Normalize to 5 columns by padding width/height with zeros, and trimming extras if any
-                    if lb.shape[1] == 3:
-                        lb = np.concatenate([lb, np.zeros((lb.shape[0], 2), dtype=lb.dtype)], axis=1)
-                    elif lb.shape[1] > 5:
+                    # Normalize to 5 columns by padding width/height with a small positive value so they survive
+                    # augment filters that drop zero-area boxes. Width/height are ignored in point loss later.
+                    min_wh = 0.01  # normalized default width/height (~6.4 px @ 640 size)
+                    if lb.shape[1] >= 5:
                         lb = lb[:, :5]
+                        # If provided w/h are zeros (or near-zero), replace with min_wh to avoid being dropped.
+                        near_zero = lb[:, 3:5] <= 1e-6
+                        if near_zero.any():
+                            lb[:, 3:5][near_zero] = min_wh
                     elif lb.shape[1] == 4:
-                        # If a confidence column exists, drop it and pad to 5
-                        lb = np.concatenate([lb[:, :3], np.zeros((lb.shape[0], 2), dtype=lb.dtype)], axis=1)
+                        # Likely includes confidence -> drop it and pad w/h
+                        wh = np.full((lb.shape[0], 2), min_wh, dtype=lb.dtype)
+                        lb = np.concatenate([lb[:, :3], wh], axis=1)
+                    else:  # exactly 3 columns
+                        wh = np.full((lb.shape[0], 2), min_wh, dtype=lb.dtype)
+                        lb = np.concatenate([lb, wh], axis=1)
                     points = lb[:, 1:3]
                 else:
                     assert lb.shape[1] == 5, f"labels require 5 columns, {lb.shape[1]} columns detected"

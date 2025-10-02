@@ -148,7 +148,9 @@ class PointDetectionTrainer(BaseTrainer):
 
     def get_validator(self):
         """Return a DetectionValidator for YOLO model validation."""
-        self.loss_names = "point_loss", "cls_loss", "dfl_loss"
+        # For point detection, underlying loss vector is [box(0), cls, point(dfl-like)].
+        # Name them accordingly to avoid confusion in logs.
+        self.loss_names = "box_loss", "cls_loss", "point_loss"
         return yolo.point.PointDetectionValidator(
             self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )
