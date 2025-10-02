@@ -191,8 +191,8 @@ class PointDFLoss(nn.Module):
 
         # 根據左右整數和權重，填充目標分佈
         # .long() is necessary for scatter_
-        target_dist.scatter_(1, tl.unsqueeze(1).long(), wl.unsqueeze(1))
-        target_dist.scatter_(1, tr.unsqueeze(1).long(), wr.unsqueeze(1))
+        target_dist.scatter_(1, tl.unsqueeze(1).long(), wl.unsqueeze(1).to(target_dist.dtype))
+        target_dist.scatter_(1, tr.unsqueeze(1).long(), wr.unsqueeze(1).to(target_dist.dtype))
 
         # 使用 BCEWithLogitsLoss 計算預測分佈和目標分佈之間的損失
         loss = F.binary_cross_entropy_with_logits(pred_dist, target_dist, reduction='none')

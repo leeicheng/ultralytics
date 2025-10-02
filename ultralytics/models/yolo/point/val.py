@@ -76,14 +76,7 @@ class PointDetectionValidator(BaseValidator):
         # Debug logging for preds structure
         try:
             if isinstance(preds, (list, tuple)):
-                LOGGER.info(f"[PointValidator] postprocess received {type(preds).__name__} of len={len(preds)}")
-                for i, p in enumerate(preds):
-                    shape = tuple(p.shape) if hasattr(p, "shape") else None
-                    LOGGER.info(f"  preds[{i}]: type={type(p).__name__}, shape={shape}")
                 preds = preds[0]
-            else:
-                shape = tuple(preds.shape) if hasattr(preds, "shape") else None
-                LOGGER.info(f"[PointValidator] postprocess received tensor shape={shape}")
         except Exception as e:
             LOGGER.warning(f"[PointValidator] postprocess debug log failed: {e}")
 
