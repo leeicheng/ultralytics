@@ -96,6 +96,10 @@ class PointDetectionValidator(BaseValidator):
             points = bboxes[:, :2] * torch.tensor(imgsz, device=self.device)[[1, 0]]
             ops.scale_coords(imgsz, points, ori_shape, ratio_pad=ratio_pad)
             areas = (bboxes[:, 2] * imgsz[1]) * (bboxes[:, 3] * imgsz[0])
+            # Apply an area floor to avoid near-zero areas (from point-only labels) causing OKS to be too strict
+            min_wh = getattr(self.args, "min_wh", 0.05)  # normalized minimum width/height
+            min_area = (min_wh * imgsz[1]) * (min_wh * imgsz[0])
+            areas = torch.clamp(areas, min=min_area)
         else:
             points = bboxes.new_zeros((0, 2))
             areas = bboxes.new_zeros((0,))
@@ -145,6 +149,36 @@ class PointDetectionValidator(BaseValidator):
             if nl:
                 self.stats["target_cls"].append(cls)
                 self.stats["target_img"].append(stat["target_img"])
+
+    def finalize_metrics(self, *args, **kwargs):
+        # Attach accumulated speed dict so it prints in BaseValidator
+        self.metrics.speed = self.speed
+
+    def get_stats(self):
+        # Aggregate per-batch stats to numpy arrays and run AP/OKS processing
+        import numpy as np
+        stats = {k: torch.cat(v, 0).cpu().numpy() for k, v in self.stats.items() if len(v)}
+        if not stats:
+            return self.metrics.results_dict
+        self.nt_per_class = np.bincount(stats["target_cls"].astype(int), minlength=self.nc)
+        self.nt_per_image = np.bincount(stats["target_img"].astype(int), minlength=self.nc)
+        stats.pop("target_img", None)
+        self.metrics.process(**stats, on_plot=self.on_plot)
+        return self.metrics.results_dict
+
+    def print_results(self):
+        # Print headline plus per-class if verbose
+        pf = "%22s" + "%11i" * 2 + "%11.3g" * len(self.metrics.keys)
+        total_images = int(self.seen)
+        total_instances = int(self.nt_per_class.sum()) if hasattr(self, "nt_per_class") else 0
+        means = self.metrics.mean_results()
+        LOGGER.info(pf % ("all", total_images, total_instances, *means))
+        if total_instances == 0:
+            LOGGER.warning(f"no labels found in {self.args.task} set, can not compute metrics without labels")
+        # Per-class
+        if self.args.verbose and not self.training and self.nc > 1 and len(self.stats["tp"]) > 0:
+            for i, c in enumerate(self.metrics.ap_class_index):
+                LOGGER.info(pf % (self.names[c], self.nt_per_image[c], self.nt_per_class[c], *self.metrics.class_result(i)))
 
     def _process_batch(self, detections, gt_points, gt_cls, gt_areas):
         oks = point_oks(gt_points, detections[:, :2], gt_areas, self.sigmas)
