@@ -45,6 +45,10 @@ class PointDetectionPredictor(BasePredictor):
         if not isinstance(orig_imgs, list):
             orig_imgs = ops.convert_torch2numpy_batch(orig_imgs)
 
+        # Handle tuple output from model forward (y, x) in inference mode
+        if isinstance(preds, (tuple, list)):
+            preds = preds[0]  # Take the inference output y
+
         bs = preds.shape[0]
         results = []
         class_filter = None

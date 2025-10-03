@@ -93,17 +93,19 @@ class PointAssigner:
             cost_matrix = cost_c * cost_d
 
             # 3. 為每個 GT 選擇 Top-K 最佳匹配
-            _, topk_indices = torch.topk(cost_matrix, k=self.topk, dim=1, largest=False)
+            # 動態調整 k 以避免 topk 超出範圍
+            k = min(self.topk, cost_matrix.shape[1])
+            _, topk_indices = torch.topk(cost_matrix, k=k, dim=1, largest=False)
 
             # 4. 建立輸出張量
-            # topk_indices 的維度是 (num_gt, topk)
+            # topk_indices 的維度是 (num_gt, k)
             # 我們需要將這些匹配結果填入最終的輸出張量中
 
             # 將 topk_indices 攤平成一維
             matched_pred_indices = topk_indices.reshape(-1)
 
             # 建立對應的 gt 索引
-            matched_gt_indices = torch.arange(num_gt, device=device).unsqueeze(1).repeat(1, self.topk).reshape(-1)
+            matched_gt_indices = torch.arange(num_gt, device=device).unsqueeze(1).repeat(1, k).reshape(-1)
 
             # 標記正樣本 (Foreground Mask)
             fg_mask[b][matched_pred_indices] = True
